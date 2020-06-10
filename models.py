@@ -27,7 +27,8 @@ class TD3Critic(nn.Module):
         q1 = nn.relu(q1)
         q1 = nn.Dense(q1, features=1)
 
-        if Q1: return q1
+        if Q1:
+            return q1
 
         q2 = nn.Dense(state_action, features=256)
         q2 = nn.relu(q2)
@@ -49,7 +50,8 @@ class DoubleCritic(nn.Module):
         q1 = nn.elu(q1)
         q1 = nn.Dense(q1, features=1)
 
-        if Q1: return q1
+        if Q1:
+            return q1
 
         q2 = nn.Dense(state_action, features=500)
         q2 = nn.LayerNorm(q2)
@@ -62,14 +64,23 @@ class DoubleCritic(nn.Module):
 
 
 class GaussianPolicy(nn.Module):
-    def apply(self, x, action_dim, max_action, key=None, MPO=False,
-              sample=False, log_sig_min=-20, log_sig_max=2):
+    def apply(
+        self,
+        x,
+        action_dim,
+        max_action,
+        key=None,
+        MPO=False,
+        sample=False,
+        log_sig_min=-20,
+        log_sig_max=2,
+    ):
         x = nn.Dense(x, features=200)
         x = nn.LayerNorm(x)
         x = nn.tanh(x)
         x = nn.Dense(x, features=200)
         x = nn.elu(x)
-        x = nn.Dense(x, features=2*action_dim)
+        x = nn.Dense(x, features=2 * action_dim)
 
         mu, log_sig = jnp.split(x, 2, axis=-1)
         log_sig = nn.softplus(log_sig)
@@ -91,7 +102,7 @@ class GaussianPolicy(nn.Module):
 
 class Constant(nn.Module):
     def apply(self, start_value, dtype=jnp.float32):
-        value = self.param('value', (1,), nn.initializers.ones)
+        value = self.param("value", (1,), nn.initializers.ones)
         return start_value * jnp.asarray(value, dtype)
 
 

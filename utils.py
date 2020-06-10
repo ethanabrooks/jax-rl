@@ -22,7 +22,7 @@ class ReplayBuffer(object):
         self.action[self.ptr] = action
         self.next_state[self.ptr] = next_state
         self.reward[self.ptr] = reward
-        self.not_done[self.ptr] = 1. - done
+        self.not_done[self.ptr] = 1.0 - done
 
         self.ptr = (self.ptr + 1) % self.max_size
         self.size = min(self.size + 1, self.max_size)
@@ -35,15 +35,15 @@ class ReplayBuffer(object):
             jax.device_put(self.action[ind]),
             jax.device_put(self.next_state[ind]),
             jax.device_put(self.reward[ind]),
-            jax.device_put(self.not_done[ind])
+            jax.device_put(self.not_done[ind]),
         )
 
 
 @jax.jit
 def copy_params(model, model_target, tau):
     update_params = jax.tree_multimap(
-        lambda m1, mt: tau * m1 + (1 - tau) * mt,
-        model.params, model_target.params)
+        lambda m1, mt: tau * m1 + (1 - tau) * mt, model.params, model_target.params
+    )
 
     return model_target.replace(params=update_params)
 
@@ -70,7 +70,11 @@ def sample_from_multivariate_normal(rng, mean, cov, shape=None):
 
 @jax.jit
 def gaussian_likelihood(sample, mu, log_sig):
-    pre_sum = -0.5 * (((sample - mu) / (jnp.exp(log_sig) + 1e-6)) ** 2 + 2 * log_sig + jnp.log(2 * onp.pi))
+    pre_sum = -0.5 * (
+        ((sample - mu) / (jnp.exp(log_sig) + 1e-6)) ** 2
+        + 2 * log_sig
+        + jnp.log(2 * onp.pi)
+    )
     return jnp.sum(pre_sum, axis=1)
 
 
@@ -82,7 +86,7 @@ def kl_mvg_diag(pm, pv, qm, qv):
     of Gaussians qm,qv.
     Diagonal covariances are assumed.  Divergence is expressed in nats.
     """
-    if (len(qm.shape) == 2):
+    if len(qm.shape) == 2:
         axis = 1
     else:
         axis = 0
@@ -90,11 +94,12 @@ def kl_mvg_diag(pm, pv, qm, qv):
     dpv = pv.prod()
     dqv = qv.prod(axis)
     # Inverse of diagonal covariance qv
-    iqv = 1./qv
+    iqv = 1.0 / qv
     # Difference between means pm, qm
     diff = qm - pm
-    return (0.5 *
-            (jnp.log(dqv / dpv)            # log |\Sigma_q| / |\Sigma_p|
-             + (iqv * pv).sum(axis)          # + tr(\Sigma_q^{-1} * \Sigma_p)
-             + (diff * iqv * diff).sum(axis) # + (\mu_q-\mu_p)^T\Sigma_q^{-1}(\mu_q-\mu_p)
-             - len(pm)))
+    return 0.5 * (
+        jnp.log(dqv / dpv)  # log |\Sigma_q| / |\Sigma_p|
+        + (iqv * pv).sum(axis)  # + tr(\Sigma_q^{-1} * \Sigma_p)
+        + (diff * iqv * diff).sum(axis)  # + (\mu_q-\mu_p)^T\Sigma_q^{-1}(\mu_q-\mu_p)
+        - len(pm)
+    )
