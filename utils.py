@@ -1,19 +1,20 @@
 from typing import Iterator, Union
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import random
 import numpy as onp
 
 
 class ReplayBuffer(object):
-    def __init__(self, state_dim, action_dim, max_size=int(2e6)):
+    def __init__(self, state_shape, action_dim, max_size=int(2e6)):
         self.max_size = max_size
         self.ptr = 0
         self.size = 0
 
-        self.state = onp.zeros((max_size, state_dim))
+        self.state = onp.zeros((max_size, *state_shape))
         self.action = onp.zeros((max_size, action_dim))
-        self.next_state = onp.zeros((max_size, state_dim))
+        self.next_state = onp.zeros((max_size, *state_shape))
         self.reward = onp.zeros((max_size, 1))
         self.not_done = onp.zeros((max_size, 1))
 
@@ -103,3 +104,7 @@ def kl_mvg_diag(pm, pv, qm, qv):
         + (diff * iqv * diff).sum(axis)  # + (\mu_q-\mu_p)^T\Sigma_q^{-1}(\mu_q-\mu_p)
         - len(pm)
     )
+
+
+def flat_obs(o):
+    return np.concatenate([o[k].flatten() for k in o])

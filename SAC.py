@@ -19,7 +19,7 @@ def actor_loss_fn(log_alpha, log_p, min_q):
 
 
 def alpha_loss_fn(log_alpha, target_entropy, log_p):
-    return (log_alpha * (-log_p - target_entropy) ).mean()
+    return (log_alpha * (-log_p - target_entropy)).mean()
 
 
 @jax.jit
@@ -89,7 +89,7 @@ def alpha_step(optimizer, log_p, target_entropy):
 class SAC:
     def __init__(
         self,
-        state_dim,
+        state_shape,
         action_dim,
         max_action,
         discount=0.99,
@@ -102,7 +102,7 @@ class SAC:
 
         self.rng = PRNGSequence(seed)
 
-        actor_input_dim = [((1, state_dim), jnp.float32)]
+        actor_input_dim = [((1, *state_shape), jnp.float32)]
 
         actor = build_gaussian_policy_model(
             actor_input_dim, action_dim, max_action, next(self.rng)
@@ -113,7 +113,7 @@ class SAC:
         init_rng = next(self.rng)
 
         critic_input_dim = [
-            ((1, state_dim), jnp.float32),
+            ((1, *state_shape), jnp.float32),
             ((1, action_dim), jnp.float32),
         ]
 
