@@ -76,21 +76,20 @@ def main(
     assert isinstance(env, Environment)
     # Set seeds
     np.random.seed(seed)
-    state_shape = env.observation_spec().shape
-    action_dim = env.action_spec().shape[0]
-    max_action = env.max_action()
+    state_shape = env.observation_shape
     kwargs = dict(
         state_shape=state_shape,
-        action_dim=action_dim,
-        max_action=max_action,
+        action_dim=env.action_dim,
+        actor_dim=env.actor_dim,
+        action_sampler=env.sample_action,
         discount=discount,
     )
     # Initialize policy
     if policy == "TD3":
         # Target policy smoothing is scaled wrt the action scale
         kwargs.update(
-            policy_noise=policy_noise * max_action,
-            noise_clip=noise_clip * max_action,
+            policy_noise=policy_noise,  # * max_action,
+            noise_clip=noise_clip,  # * max_action,
             policy_freq=policy_freq,
             expl_noise=expl_noise,
             tau=tau,
@@ -104,7 +103,7 @@ def main(
     if load_model != "":
         policy_file = file_name if load_model == "default" else load_model
         policy.load(f"./models/{policy_file}")
-    replay_buffer = ReplayBuffer(state_shape, action_dim, max_size=int(buffer_size))
+    replay_buffer = ReplayBuffer(state_shape, env.action_dim, max_size=int(buffer_size))
     # Evaluate untrained policy
     evaluations = [eval_policy(policy=policy, env_id=env_id, seed=seed, render=render)]
     time_step = env.reset()
@@ -118,11 +117,9 @@ def main(
 
         # Select action randomly or according to policy
         if t < start_time_steps:
-            action = np.random.uniform(
-                env.max_action(), env.min_action(), size=env.action_spec().shape,
-            )
+            action = env.action_space.sample()
         else:
-            action = (policy.select_action(state)).clip(-max_action, max_action)
+            action = policy.select_action(state)
 
         # Perform action
         time_step = env.step(action)
@@ -157,7 +154,9 @@ def main(
 
         # Evaluate episode
         if (t + 1) % eval_freq == 0:
-            evaluations.append(eval_policy(policy, env_id, seed))
+            evaluations.append(
+                eval_policy(policy=policy, env_id=env_id, seed=seed, render=render)
+            )
             np.save(f"./results/{file_name}", evaluations)
         if (t + 1) % save_freq == 0:
             if save_model:

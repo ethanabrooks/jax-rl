@@ -4,6 +4,7 @@ from jax import random
 import jax.numpy as jnp
 from flax import optim
 from haiku import PRNGSequence
+from flax import nn
 
 from utils import double_mse, sample_from_multivariate_normal, apply_model, copy_params
 from saving import save_model, load_model
@@ -11,6 +12,7 @@ from models import (
     build_gaussian_policy_model,
     build_double_critic_model,
     build_constant_model,
+    MLP,
 )
 
 
@@ -31,7 +33,6 @@ def get_td_target(
     reward,
     not_done,
     discount,
-    max_action,
     actor,
     critic_target,
     log_alpha,
@@ -91,7 +92,8 @@ class SAC:
         self,
         state_shape,
         action_dim,
-        max_action,
+        actor_dim,
+        action_sampler,
         discount=0.99,
         tau=0.005,
         policy_freq=2,
@@ -104,9 +106,12 @@ class SAC:
 
         actor_input_dim = [((1, *state_shape), jnp.float32)]
 
-        actor = build_gaussian_policy_model(
-            actor_input_dim, action_dim, max_action, next(self.rng)
-        )
+        actor = MLP.partial(output_dim=actor_dim, action_sampler=action_sampler)
+        _, init_params = actor.init_by_shape(next(self.rng), actor_input_dim)
+        actor = nn.Model(actor, init_params)
+        # actor = build_gaussian_policy_model(
+        #     actor_input_dim, action_dim, max_action, next(self.rng)
+        # )
         actor_optimizer = optim.Adam(learning_rate=lr).create(actor)
         self.actor_optimizer = jax.device_put(actor_optimizer)
 
@@ -129,7 +134,6 @@ class SAC:
         self.log_alpha_optimizer = jax.device_put(log_alpha_optimizer)
         self.target_entropy = -action_dim
 
-        self.max_action = max_action
         self.discount = discount
         self.tau = tau
         self.policy_freq = policy_freq
@@ -140,7 +144,6 @@ class SAC:
     def target_params(self):
         return (
             self.discount,
-            self.max_action,
             self.actor_optimizer.target,
             self.critic_target,
             self.log_alpha_optimizer.target,

@@ -1,14 +1,17 @@
 import abc
-from abc import ABC
+from typing import Tuple
 
 import gym
+import jax.numpy as jnp
+import numpy as np
 from dm_env import restart, transition, termination, specs
-import dm_env
-from gym.envs import registry
-from gym.envs.classic_control import PendulumEnv, CartPoleEnv
+from flax import nn
+from jax import random
+
+from utils import gaussian_likelihood
 
 
-class Environment(dm_env.Environment, gym.Wrapper):
+class Environment(gym.Wrapper):
     def reset(self):
         reset = self.env.reset()
         return restart(reset)
@@ -24,42 +27,79 @@ class Environment(dm_env.Environment, gym.Wrapper):
             name="observation",
         )
 
-    def action_spec(self):
-        return specs.Array(
-            self.action_space.shape, dtype=self.observation_space.dtype, name="action",
-        )
+    @property
+    def observation_shape(self) -> Tuple[int]:
+        return self.observation_space.shape
 
+    @property
     @abc.abstractmethod
-    def max_action(self):
+    def actor_dim(self) -> int:
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def action_dim(self) -> int:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def min_action(self):
+    def sample_action(
+        self, x, key=None, sample=False,
+    ):
         raise NotImplementedError
 
 
 class ContinuousActionEnvironment(Environment):
-    def max_action(self):
-        assert isinstance(self.action_space, gym.spaces.Box)
-        return self.action_space.high
+    @property
+    def actor_dim(self) -> int:
+        return 2 * int(np.prod(self.action_space.shape))
 
-    def min_action(self):
-        assert isinstance(self.action_space, gym.spaces.Box)
-        return self.action_space.low
+    @property
+    def action_dim(self) -> int:
+        return int(np.prod(self.action_space.shape))
+
+    def sample_action(self, x, key=None, sample=False):
+        _, d = x.shape
+        assert d == self.actor_dim
+        log_sig_min = -20
+        log_sig_max = 2
+        mu, log_sig = jnp.split(x, 2, axis=-1)
+        log_sig = nn.softplus(log_sig)
+        log_sig = jnp.clip(log_sig, log_sig_min, log_sig_max)
+        min_action = self.action_space.low
+        max_action = self.action_space.high
+
+        if not sample:
+            return max_action * nn.tanh(mu), log_sig
+        else:
+            sig = jnp.exp(log_sig)
+            pi = mu + random.normal(key, mu.shape) * sig
+            log_pi = gaussian_likelihood(pi, mu, log_sig)
+            log_pi -= jnp.sum(jnp.log(nn.relu(1 - nn.tanh(pi) ** 2) + 1e-6), axis=1)
+            pi = nn.sigmoid(pi) * (max_action - min_action) + min_action
+            return pi, log_pi
 
 
 class DiscreteActionEnvironment(Environment):
-    def max_action(self):
-        assert isinstance(self.action_space, gym.spaces.Discrete)
-        return (self.action_space.n,)
+    @property
+    def actor_dim(self) -> int:
+        return self.action_space.n
 
-    def min_action(self):
-        return (0,)
+    @property
+    def action_dim(self) -> int:
+        return self.action_space.n
+
+    def sample_action(self, x, key=None, sample=False, **kwargs):
+        _, d = x.shape
+        assert d == self.actor_dim
+        if not sample:
+            return jnp.argmax(x, axis=-1)
+        else:
+            pi = nn.softmax(x)
+            choice = random.categorical(key, x)
+            return (choice, pi[choice])
 
 
-class DiscreteObservationEnvironment(Environment, ABC):
-    def observation_spec(self):
-        return specs.Array((1,), dtype=int, name="observation")
+# class DiscreteObservationEnvironment(Environment, ABC): raise NotImplementedError
 
 
 def register(cls, name):
@@ -73,9 +113,9 @@ class PendulumEnvironment(ContinuousActionEnvironment):
         super().__init__(gym.make("Pendulum-v0", **kwargs))
 
 
-class CartPoleEnvironment(ContinuousActionEnvironment):
+class CartPoleEnvironment(DiscreteActionEnvironment):
     def __init__(self):
-        super().__init__(gym.make("Cartpole-v1"))
+        super().__init__(gym.make("CartPole-v1"))
 
 
 register(CartPoleEnvironment, "CartPole-v2")
