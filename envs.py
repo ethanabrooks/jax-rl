@@ -1,6 +1,9 @@
+import abc
+
 import gym
 from dm_env import restart, transition, termination, specs
 import dm_env
+from gym.envs import registry
 from gym.envs.classic_control import PendulumEnv, CartPoleEnv
 
 
@@ -25,8 +28,21 @@ class Environment(dm_env.Environment, gym.Wrapper):
             self.action_space.shape, dtype=self.observation_space.dtype, name="action",
         )
 
+    @abc.abstractmethod
+    def max_action(self):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def min_action(self):
+        raise NotImplementedError
+
+
+class ContinuousActionEnvironment(Environment):
     def max_action(self):
         return self.action_space.high
+
+    def min_action(self):
+        return self.action_space.low
 
 
 def register(cls, name):
@@ -35,11 +51,15 @@ def register(cls, name):
     )
 
 
-class PendulumEnvironment(Environment):
+class PendulumEnvironment(ContinuousActionEnvironment):
     def __init__(self, **kwargs):
-        super().__init__(PendulumEnv(**kwargs))
+        super().__init__(gym.make("Pendulum-v0", **kwargs))
 
 
-class CartPoleEnvironment(Environment):
+class CartPoleEnvironment(ContinuousActionEnvironment):
     def __init__(self):
-        super().__init__(CartPoleEnv())
+        super().__init__(gym.make("Cartpole-v1"))
+
+
+register(CartPoleEnvironment, "CartPole-v2")
+register(PendulumEnvironment, "Pendulum-v1")

@@ -1,21 +1,23 @@
-import os
 import argparse
-import numpy as np
+import os
+
 import gym
+import numpy as np
 from tqdm import tqdm
 
-import TD3, SAC, MPO
-from envs import register, CartPoleEnvironment, PendulumEnvironment
+import MPO
+import SAC
+import TD3
+from envs import Environment
 from utils import ReplayBuffer
-
-register(CartPoleEnvironment, "CartPole-v2")
-register(PendulumEnvironment, "Pendulum-v1")
 
 
 # Runs policy for X episodes and returns average reward
 # A fixed seed is used for the eval environment
 def eval_policy(policy, env_id, seed, eval_episodes=10):
+    gym.make("Pendulum-v0")
     eval_env = gym.make(env_id)
+    eval_env.seed(seed)
 
     avg_reward = 0.0
     for _ in tqdm(range(eval_episodes), desc="eval"):
@@ -114,6 +116,7 @@ def main(
     if not os.path.exists("./graphs"):
         os.makedirs("./graphs")
     env = gym.make(env_id)
+    assert isinstance(env, Environment)
     # Set seeds
     np.random.seed(seed)
     state_shape = env.observation_spec().shape
@@ -160,9 +163,7 @@ def main(
         # Select action randomly or according to policy
         if t < start_time_steps:
             action = np.random.uniform(
-                env.action_spec().minimum,
-                env.action_spec().maximum,
-                size=env.action_spec().shape,
+                env.max_action(), env.min_action(), size=env.action_spec().shape,
             )
         else:
             action = (policy.select_action(state)).clip(-max_action, max_action)
