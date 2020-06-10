@@ -8,6 +8,7 @@ from tqdm import tqdm
 import MPO
 import SAC
 import TD3
+from arguments import add_arguments
 from envs import Environment
 from utils import ReplayBuffer
 
@@ -35,55 +36,6 @@ def eval_policy(policy, env_id, seed, eval_episodes=10):
     return avg_reward
 
 
-def add_arguments():
-    parser.add_argument("--policy", default="TD3")  # Policy name (TD3, SAC, or MPO)
-    parser.add_argument(
-        "--env", dest="env_id", default="Pendulum-v1"
-    )  # DeepMind control suite environment name
-    parser.add_argument("--train-steps", default=1, type=int)
-    parser.add_argument("--seed", default=0, type=int)  # Sets DM control and JAX seeds
-    parser.add_argument(
-        "--start-time-steps", default=1e4, type=int
-    )  # Time steps initial random policy is used
-    parser.add_argument(
-        "--buffer-size", default=2e6, type=int
-    )  # Max size of replay buffer
-    parser.add_argument(
-        "--eval-freq", default=5e3, type=int
-    )  # How often (time steps) we evaluate
-    parser.add_argument(
-        "--max-time-steps", default=1e6, type=int
-    )  # Max time steps to run environment
-    parser.add_argument(
-        "--expl-noise", default=0.1
-    )  # Std of Gaussian exploration noise
-    parser.add_argument(
-        "--batch-size", default=256, type=int
-    )  # Batch size for both actor and critic
-    parser.add_argument("--discount", default=0.99)  # Discount factor
-    parser.add_argument("--tau", default=0.005)  # Target network update rate
-    parser.add_argument(
-        "--policy-noise", default=0.2
-    )  # Noise added to target policy during critic update
-    parser.add_argument(
-        "--noise-clip", default=0.5
-    )  # Range to clip target policy noise
-    parser.add_argument(
-        "--policy-freq", default=2, type=int
-    )  # Frequency of delayed policy updates
-    # parser.add_argument(
-    #     "--actor-updates", default=1, type=int
-    # )  # Number of gradient steps for policy network per update
-    parser.add_argument(
-        "--save-model", action="store_true"
-    )  # Save model and optimizer parameters
-    parser.add_argument(
-        "--load-model", default=""
-    )  # Model load file name, "" doesn't load, "default" uses file_name
-    parser.add_argument("--num-action-samples", default=20, type=int)
-    parser.add_argument("--save-freq", default=5e3, type=int)
-
-
 def main(
     batch_size,
     buffer_size,
@@ -104,6 +56,7 @@ def main(
     start_time_steps,
     tau,
     train_steps,
+    render,
 ):
     file_name = f"{policy}_{env_id}_{seed}"
     print("---------------------------------------")
@@ -155,6 +108,8 @@ def main(
     episode_time_steps = 0
     episode_num = 0
     for t in range(int(max_time_steps)):
+        if render:
+            env.render()
 
         episode_time_steps += 1
 
@@ -205,10 +160,12 @@ def main(
             np.save(f"./results/{file_name}", evaluations)
         if (t + 1) % save_freq == 0:
             if save_model:
-                policy.save(f"./models/{file_name}_" + str(t + 1))
+                save_path = f"./models/{file_name}_" + str(t + 1)
+                print(f"Saving model to {save_path}")
+                policy.save(save_path)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    add_arguments()
-    main(**vars(parser.parse_args()))
+    PARSER = argparse.ArgumentParser()
+    add_arguments(PARSER)
+    main(**vars(PARSER.parse_args()))

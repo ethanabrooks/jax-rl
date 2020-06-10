@@ -1,4 +1,5 @@
 import abc
+from abc import ABC
 
 import gym
 from dm_env import restart, transition, termination, specs
@@ -39,10 +40,26 @@ class Environment(dm_env.Environment, gym.Wrapper):
 
 class ContinuousActionEnvironment(Environment):
     def max_action(self):
+        assert isinstance(self.action_space, gym.spaces.Box)
         return self.action_space.high
 
     def min_action(self):
+        assert isinstance(self.action_space, gym.spaces.Box)
         return self.action_space.low
+
+
+class DiscreteActionEnvironment(Environment):
+    def max_action(self):
+        assert isinstance(self.action_space, gym.spaces.Discrete)
+        return (self.action_space.n,)
+
+    def min_action(self):
+        return (0,)
+
+
+class DiscreteObservationEnvironment(Environment, ABC):
+    def observation_spec(self):
+        return specs.Array((1,), dtype=int, name="observation")
 
 
 def register(cls, name):
