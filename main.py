@@ -1,4 +1,5 @@
 import argparse
+import itertools
 import os
 
 import gym
@@ -15,15 +16,18 @@ from utils import ReplayBuffer
 
 # Runs policy for X episodes and returns average reward
 # A fixed seed is used for the eval environment
-def eval_policy(policy, env_id, seed, eval_episodes=10):
+def eval_policy(policy, env_id, seed, render, eval_episodes=10):
     gym.make("Pendulum-v0")
     eval_env = gym.make(env_id)
     eval_env.seed(seed)
 
     avg_reward = 0.0
-    for _ in tqdm(range(eval_episodes), desc="eval"):
+    it = itertools.count() if render else tqdm(range(eval_episodes), desc="eval")
+    for _ in it:
         time_step = eval_env.reset()
         while not time_step.last():
+            if render:
+                eval_env.render()
             action = policy.select_action(time_step.observation)
             time_step = eval_env.step(action)
             avg_reward += time_step.reward
@@ -102,15 +106,12 @@ def main(
         policy.load(f"./models/{policy_file}")
     replay_buffer = ReplayBuffer(state_shape, action_dim, max_size=int(buffer_size))
     # Evaluate untrained policy
-    evaluations = [eval_policy(policy, env_id, seed)]
+    evaluations = [eval_policy(policy=policy, env_id=env_id, seed=seed, render=render)]
     time_step = env.reset()
     episode_reward = 0
     episode_time_steps = 0
     episode_num = 0
     for t in range(int(max_time_steps)):
-        if render:
-            env.render()
-
         episode_time_steps += 1
 
         state = time_step.observation
