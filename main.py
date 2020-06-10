@@ -2,6 +2,7 @@ import os
 import argparse
 import numpy as np
 import gym
+from tqdm import tqdm
 
 import TD3, SAC, MPO
 from envs import register, CartPoleEnvironment, PendulumEnvironment
@@ -10,13 +11,14 @@ from utils import ReplayBuffer
 register(CartPoleEnvironment, "CartPole-v2")
 register(PendulumEnvironment, "Pendulum-v1")
 
+
 # Runs policy for X episodes and returns average reward
 # A fixed seed is used for the eval environment
 def eval_policy(policy, env_id, seed, eval_episodes=10):
     eval_env = gym.make(env_id)
 
     avg_reward = 0.0
-    for _ in range(eval_episodes):
+    for _ in tqdm(range(eval_episodes), desc="eval"):
         time_step = eval_env.reset()
         while not time_step.last():
             action = policy.select_action(time_step.observation)
@@ -206,7 +208,6 @@ def main(
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     add_arguments()
     main(**vars(parser.parse_args()))
