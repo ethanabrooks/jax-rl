@@ -19,7 +19,7 @@ def actor_loss_fn(log_alpha, log_p, min_q):
 
 
 def alpha_loss_fn(log_alpha, target_entropy, log_p):
-    return (log_alpha * (-log_p - target_entropy)).mean()
+    return (log_alpha * (-log_p - target_entropy) ).mean()
 
 
 @jax.jit
