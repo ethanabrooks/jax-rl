@@ -21,9 +21,8 @@ from models import (
 )
 
 
-def actor_loss_fn(alpha, log_p, min_q):
-    return log_p * jax.lax.stop_gradient(alpha * log_p - min_q + alpha)
-    # return (jnp.exp(log_alpha) * log_p - min_q).mean()
+def actor_loss_fn(log_alpha, log_p, min_q):
+    return (jnp.exp(log_alpha) * log_p - min_q).mean()
 
 
 def alpha_loss_fn(log_alpha, target_entropy, log_p):
@@ -70,7 +69,9 @@ def actor_step(rng, optimizer, critic, state, log_alpha):
         actor_action, log_p = actor(state, sample=True, key=rng)
         q1, q2 = critic(state, actor_action)
         min_q = jnp.minimum(q1, q2)
-        partial_loss_fn = jax.vmap(partial(actor_loss_fn, jax.exp(log_alpha())))
+        partial_loss_fn = jax.vmap(
+            partial(actor_loss_fn, jax.lax.stop_gradient(log_alpha()))
+        )
         actor_loss = partial_loss_fn(log_p, min_q)
         return jnp.mean(actor_loss), log_p
 
