@@ -15,7 +15,6 @@ from utils import (
 )
 from saving import save_model, load_model
 from models import (
-    build_gaussian_policy_model,
     build_double_critic_model,
     build_constant_model,
     MLP,
@@ -44,7 +43,6 @@ def get_td_target(
     log_alpha,
 ):
     next_action, next_log_p = actor(next_state, sample=True, key=rng)
-
     target_Q1, target_Q2 = critic_target(next_state, next_action)
     target_Q = jnp.minimum(target_Q1, target_Q2) - jnp.exp(log_alpha()) * next_log_p
     target_Q = reward + not_done * discount * target_Q
@@ -115,9 +113,6 @@ class SAC:
         actor = MLP.partial(output_dim=actor_dim, action_sampler=action_sampler)
         _, init_params = actor.init_by_shape(next(self.rng), actor_input_dim)
         actor = nn.Model(actor, init_params)
-        # actor = build_gaussian_policy_model(
-        #     actor_input_dim, action_dim, max_action, next(self.rng)
-        # )
         actor_optimizer = optim.Adam(learning_rate=lr).create(actor)
         self.actor_optimizer = jax.device_put(actor_optimizer)
 
@@ -155,13 +150,13 @@ class SAC:
             self.log_alpha_optimizer.target,
         )
 
-    def select_action(self, state):
-        mu, _ = apply_model(self.actor_optimizer.target, state)
-        return mu.flatten()
+    def best_action(self, state):
+        action, _ = apply_model(self.actor_optimizer.target, state)
+        return action
 
     def sample_action(self, state):
-        mu, _ = sample_model(self.actor_optimizer.target, state, key=next(self.rng))
-        return mu.flatten()
+        action, _ = sample_model(self.actor_optimizer.target, state, key=next(self.rng))
+        return action.flatten()
         # mu, log_sig = apply_model(self.actor_optimizer.target, state)
         # return mu + random.normal(rng, mu.shape) * jnp.exp(log_sig)
 

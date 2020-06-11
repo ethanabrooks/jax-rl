@@ -86,17 +86,18 @@ class DiscreteActionEnvironment(Environment):
 
     @property
     def action_dim(self) -> int:
-        return self.action_space.n
+        return 1
 
     def sample_action(self, x, key=None, sample=False, **kwargs):
-        _, d = x.shape
+        n, d = x.shape
         assert d == self.actor_dim
+        pi = nn.softmax(x)
         if not sample:
-            return jnp.argmax(x, axis=-1)
+            choice = jnp.argmax(x, axis=-1)
         else:
-            pi = nn.softmax(x)
             choice = random.categorical(key, x)
-            return (choice, pi[choice])
+            choice = jnp.expand_dims(choice, -1)
+        return (choice, pi[choice])
 
 
 # class DiscreteObservationEnvironment(Environment, ABC): raise NotImplementedError
@@ -116,6 +117,9 @@ class PendulumEnvironment(ContinuousActionEnvironment):
 class CartPoleEnvironment(DiscreteActionEnvironment):
     def __init__(self):
         super().__init__(gym.make("CartPole-v1"))
+
+    def step(self, u):
+        return super().step(u if isinstance(u, int) else u.item())
 
 
 register(CartPoleEnvironment, "CartPole-v2")

@@ -28,7 +28,7 @@ def eval_policy(policy, env_id, seed, render, eval_episodes=10):
         while not time_step.last():
             if render:
                 eval_env.render()
-            action = policy.select_action(time_step.observation)
+            action = policy.best_action(time_step.observation)
             time_step = eval_env.step(action)
             avg_reward += time_step.reward
 
