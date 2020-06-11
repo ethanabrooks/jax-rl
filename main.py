@@ -119,7 +119,7 @@ def main(
         if t < start_time_steps:
             action = env.action_space.sample()
         else:
-            action = policy.select_action(state)
+            action = policy.sample_action(state)
 
         # Perform action
         time_step = env.step(action)

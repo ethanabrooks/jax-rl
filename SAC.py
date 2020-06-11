@@ -6,7 +6,13 @@ from flax import optim
 from haiku import PRNGSequence
 from flax import nn
 
-from utils import double_mse, sample_from_multivariate_normal, apply_model, copy_params
+from utils import (
+    double_mse,
+    sample_from_multivariate_normal,
+    apply_model,
+    copy_params,
+    sample_model,
+)
 from saving import save_model, load_model
 from models import (
     build_gaussian_policy_model,
@@ -153,9 +159,11 @@ class SAC:
         mu, _ = apply_model(self.actor_optimizer.target, state)
         return mu.flatten()
 
-    def sample_action(self, rng, state):
-        mu, log_sig = apply_model(self.actor_optimizer.target, state)
-        return mu + random.normal(rng, mu.shape) * jnp.exp(log_sig)
+    def sample_action(self, state):
+        mu, _ = sample_model(self.actor_optimizer.target, state, key=next(self.rng))
+        return mu.flatten()
+        # mu, log_sig = apply_model(self.actor_optimizer.target, state)
+        # return mu + random.normal(rng, mu.shape) * jnp.exp(log_sig)
 
     def train(self, replay_buffer, batch_size=100):
         self.total_it += 1
