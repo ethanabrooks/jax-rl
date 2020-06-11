@@ -47,6 +47,7 @@ def main(
     env_id,
     eval_freq,
     expl_noise,
+    learning_rate,
     load_model,
     max_time_steps,
     noise_clip,
@@ -88,6 +89,7 @@ def main(
     if policy == "TD3":
         # Target policy smoothing is scaled wrt the action scale
         kwargs.update(
+            learning_rate=learning_rate,
             policy_noise=policy_noise,  # * max_action,
             noise_clip=noise_clip,  # * max_action,
             policy_freq=policy_freq,
