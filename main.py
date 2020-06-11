@@ -30,7 +30,7 @@ def eval_policy(policy, env_id, seed, render, eval_episodes=10):
                 eval_env.render()
             action = policy.best_action(time_step.observation)
             time_step = eval_env.step(action)
-            avg_reward += time_step.reward
+            avg_reward += time_step.reward.item()
 
     avg_reward /= eval_episodes
 
