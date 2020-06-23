@@ -1,12 +1,8 @@
 black==19.10b0
+dm-env==1.2
 dm-haiku==0.0.1
 flax==0.1.0rc2
 ipdb==0.13.2
+numpy==1.18.0
 ipython==7.15.0
-jax==0.1.62
-jaxlib==0.1.43
-numpy==1.18.2
 tensorboard==2.2.2
-tensorboard-plugin-wit==1.6.0.post3
-tensorflow==2.2.0
-torch==1.5.0
