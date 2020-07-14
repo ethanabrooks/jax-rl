@@ -78,33 +78,15 @@ def main(
     # Set seeds
     np.random.seed(seed)
     state_shape = env.observation_shape
-    kwargs = dict(
+    policy = SAC.SAC(
         state_shape=state_shape,
         action_dim=env.action_dim,
         actor_dim=env.actor_dim,
         action_sampler=env.sample_action,
         discount=discount,
+        policy_freq=policy_freq,
+        tau=tau,
     )
-    # Initialize policy
-    if policy == "TD3":
-        # Target policy smoothing is scaled wrt the action scale
-        kwargs.update(
-            learning_rate=learning_rate,
-            policy_noise=policy_noise,  # * max_action,
-            noise_clip=noise_clip,  # * max_action,
-            policy_freq=policy_freq,
-            expl_noise=expl_noise,
-            tau=tau,
-        )
-        policy = TD3.TD3(**kwargs)
-    elif policy == "SAC":
-        kwargs.update(policy_freq=policy_freq, tau=tau)
-        policy = SAC.SAC(**kwargs)
-    elif policy == "MPO":
-        policy = MPO.MPO(**kwargs)
-    if load_model != "":
-        policy_file = file_name if load_model == "default" else load_model
-        policy.load(f"./models/{policy_file}")
     replay_buffer = ReplayBuffer(state_shape, env.action_dim, max_size=int(buffer_size))
     # Evaluate untrained policy
     evaluations = [eval_policy(policy=policy, env_id=env_id, seed=seed, render=render)]
