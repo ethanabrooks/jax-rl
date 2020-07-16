@@ -158,7 +158,7 @@ def main(
 
         # Evaluate episode
         if (t + 1) % eval_freq == 0:
-            evaluations.append(eval_policy(policy, env_id, seed))
+            evaluations.append(eval_policy(policy, env_id, seed, render))
             np.save(f"./results/{file_name}", evaluations)
         if (t + 1) % save_freq == 0:
             if save_model:
