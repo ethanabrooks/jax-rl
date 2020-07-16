@@ -29,6 +29,9 @@ def add_arguments(parser):
         "--policy-noise", default=0.2
     )  # Noise added to target policy during critic update
     parser.add_argument(
+        "--learning-rate", default=3e-4, type=float
+    )  # Noise added to target policy during critic update
+    parser.add_argument(
         "--noise-clip", default=0.5
     )  # Range to clip target policy noise
     parser.add_argument(

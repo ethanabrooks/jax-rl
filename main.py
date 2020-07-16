@@ -47,6 +47,7 @@ def main(
     env_id,
     eval_freq,
     expl_noise,
+    learning_rate,
     load_model,
     max_time_steps,
     noise_clip,
