@@ -14,6 +14,6 @@ RUN echo "source activate base" >> /root/.bashrc
 ENV PATH /opt/conda/envs/jax/bin:$PATH
 
 COPY entrypoint.sh /
-WORKDIR /sac
-COPY . "/sac"
+WORKDIR /jax
+COPY . "/jax"
 CMD ["/entrypoint.sh"]
