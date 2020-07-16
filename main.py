@@ -84,6 +84,7 @@ def main(
         action_dim=action_dim,
         max_action=max_action,
         discount=discount,
+        lr=learning_rate,
     )
     # Initialize policy
     if policy == "TD3":
