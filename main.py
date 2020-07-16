@@ -17,8 +17,7 @@ from utils import ReplayBuffer
 # Runs policy for X episodes and returns average reward
 # A fixed seed is used for the eval environment
 def eval_policy(policy, env_id, seed, render, eval_episodes=10):
-    gym.make("Pendulum-v0")
-    eval_env = gym.make(env_id)
+    eval_env = Environment.wrap(gym.make(env_id))
     eval_env.seed(seed)
 
     avg_reward = 0.0
@@ -73,7 +72,7 @@ def main(
         os.makedirs("./models")
     if not os.path.exists("./graphs"):
         os.makedirs("./graphs")
-    env = gym.make(env_id)
+    env = Environment.wrap(gym.make(env_id))
     assert isinstance(env, Environment)
     # Set seeds
     np.random.seed(seed)

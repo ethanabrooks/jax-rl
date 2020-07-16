@@ -1,14 +1,19 @@
 import abc
 from abc import ABC
 
+import dm_env
 import gym
 from dm_env import restart, transition, termination, specs
-import dm_env
-from gym.envs import registry
-from gym.envs.classic_control import PendulumEnv, CartPoleEnv
 
 
 class Environment(dm_env.Environment, gym.Wrapper):
+    @staticmethod
+    def wrap(env: gym.Env):
+        if isinstance(env.action_space, gym.spaces.Box):
+            return ContinuousActionEnvironment(env)
+        elif isinstance(env.action_space, gym.spaces.Discrete):
+            return DiscreteActionEnvironment(env)
+
     def reset(self):
         reset = self.env.reset()
         return restart(reset)
@@ -60,23 +65,3 @@ class DiscreteActionEnvironment(Environment):
 class DiscreteObservationEnvironment(Environment, ABC):
     def observation_spec(self):
         return specs.Array((1,), dtype=int, name="observation")
-
-
-def register(cls, name):
-    gym.register(
-        id=name, entry_point=f"{cls.__module__}:{cls.__qualname__}",
-    )
-
-
-class PendulumEnvironment(ContinuousActionEnvironment):
-    def __init__(self, **kwargs):
-        super().__init__(gym.make("Pendulum-v0", **kwargs))
-
-
-class CartPoleEnvironment(ContinuousActionEnvironment):
-    def __init__(self):
-        super().__init__(gym.make("Cartpole-v1"))
-
-
-register(CartPoleEnvironment, "CartPole-v2")
-register(PendulumEnvironment, "Pendulum-v1")

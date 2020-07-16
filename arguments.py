@@ -1,7 +1,7 @@
 def add_arguments(parser):
     parser.add_argument("--policy", default="TD3")  # Policy name (TD3, SAC, or MPO)
     parser.add_argument(
-        "--env", dest="env_id", default="Pendulum-v1"
+        "--env", dest="env_id", default="Pendulum-v0"
     )  # DeepMind control suite environment name
     parser.add_argument("--train-steps", default=1, type=int)
     parser.add_argument("--seed", default=0, type=int)  # Sets DM control and JAX seeds
