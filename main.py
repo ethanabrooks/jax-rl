@@ -1,14 +1,17 @@
+import ray
 import argparse
 import itertools
 import os
 
 import gym
 import numpy as np
+from ray import tune
 from tqdm import tqdm
 
 import MPO
 import SAC
 import TD3
+import configs
 from arguments import add_arguments
 from envs import Environment
 from utils import ReplayBuffer
@@ -40,28 +43,32 @@ def eval_policy(policy, env_id, seed, render, eval_episodes=10):
     return avg_reward
 
 
+def _main(kwargs):
+    main(**kwargs)
+
+
 def main(
-    batch_size,
-    buffer_size,
-    discount,
-    env_id,
-    eval_freq,
-    expl_noise,
-    learning_rate,
-    load_model,
-    max_time_steps,
-    noise_clip,
-    num_action_samples,
-    policy,
-    policy_freq,
-    policy_noise,
-    save_freq,
-    save_model,
-    seed,
-    start_time_steps,
-    tau,
-    train_steps,
-    render,
+    batch_size=256,
+    buffer_size=int(2e6),
+    discount=0.99,
+    env_id="Pendulum-v0",
+    eval_freq=5e3,
+    expl_noise=0.1,
+    learning_rate=3e-4,
+    load_model=None,
+    max_time_steps=int(1e6),
+    noise_clip=0.5,
+    num_action_samples=20,
+    policy="SAC",
+    policy_freq=2,
+    policy_noise=0.2,
+    save_freq=int(5e3),
+    save_model=True,
+    seed=0,
+    start_time_steps=int(1e4),
+    tau=0.005,
+    train_steps=1,
+    render=False,
 ):
     file_name = f"{policy}_{env_id}_{seed}"
     print("---------------------------------------")
@@ -103,7 +110,7 @@ def main(
         policy = SAC.SAC(**kwargs)
     elif policy == "MPO":
         policy = MPO.MPO(**kwargs)
-    if load_model != "":
+    if load_model is not None:
         policy_file = file_name if load_model == "default" else load_model
         policy.load(f"./models/{policy_file}")
     replay_buffer = ReplayBuffer(state_shape, action_dim, max_size=int(buffer_size))
@@ -177,6 +184,7 @@ def main(
 
 
 if __name__ == "__main__":
+    ray.init(local_mode=True)
     PARSER = argparse.ArgumentParser()
-    add_arguments(PARSER)
-    main(**vars(PARSER.parse_args()))
+    PARSER.add_argument("config")
+    tune.run(_main, config=getattr(configs, PARSER.parse_args().config))
