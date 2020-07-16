@@ -108,6 +108,7 @@ def main(
         policy.load(f"./models/{policy_file}")
     replay_buffer = ReplayBuffer(state_shape, action_dim, max_size=int(buffer_size))
     # Evaluate untrained policy
+
     evaluations = [eval_policy(policy=policy, env_id=env_id, seed=seed, render=render)]
     time_step = env.reset()
     episode_reward = 0
