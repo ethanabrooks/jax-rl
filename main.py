@@ -45,15 +45,11 @@ def main(
     discount,
     env_id,
     eval_freq,
-    expl_noise,
     learning_rate,
     load_model,
     max_time_steps,
-    noise_clip,
     num_action_samples,
-    policy,
     policy_freq,
-    policy_noise,
     save_freq,
     save_model,
     seed,
@@ -62,9 +58,9 @@ def main(
     train_steps,
     render,
 ):
-    file_name = f"{policy}_{env_id}_{seed}"
+    file_name = f"{env_id}_{seed}"
     print("---------------------------------------")
-    print(f"Policy: {policy}, Env: {env_id}, Seed: {seed}")
+    print(f"Env: {env_id}, Seed: {seed}")
     print("---------------------------------------")
     if not os.path.exists("./results"):
         os.makedirs("./results")
@@ -79,28 +75,15 @@ def main(
     state_shape = env.observation_spec().shape
     action_dim = env.action_spec().shape[0]
     max_action = env.max_action()
-    kwargs = dict(
+    # Initialize policy
+    policy = SAC.SAC(
         state_shape=state_shape,
         action_dim=action_dim,
         max_action=max_action,
         discount=discount,
+        policy_freq=policy_freq,
+        tau=tau,
     )
-    # Initialize policy
-    if policy == "TD3":
-        # Target policy smoothing is scaled wrt the action scale
-        kwargs.update(
-            policy_noise=policy_noise * max_action,
-            noise_clip=noise_clip * max_action,
-            policy_freq=policy_freq,
-            expl_noise=expl_noise,
-            tau=tau,
-        )
-        policy = TD3.TD3(**kwargs)
-    elif policy == "SAC":
-        kwargs.update(policy_freq=policy_freq, tau=tau)
-        policy = SAC.SAC(**kwargs)
-    elif policy == "MPO":
-        policy = MPO.MPO(**kwargs)
     if load_model != "":
         policy_file = file_name if load_model == "default" else load_model
         policy.load(f"./models/{policy_file}")
