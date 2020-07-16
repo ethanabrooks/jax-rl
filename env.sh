@@ -1,5 +1,6 @@
 #! /usr/bin/env bash
 
+export CONTAINER_VOLUME="/root/ray_results"
 export RUN_DB_PATH="$HOME/runs/jax"
 export RUN_IMAGE_BUILD_PATH="$HOME/jax-rl/"
 export RUN_DOCKERFILE_PATH="$RUN_IMAGE_BUILD_PATH/Dockerfile"
