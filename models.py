@@ -63,19 +63,7 @@ class DoubleCritic(nn.Module):
         return q1, q2
 
 
-class MLP(nn.Module):
-    def apply(self, x, output_dim, action_sampler, **kwargs):
-        x = nn.Dense(x, features=200)
-        x = nn.LayerNorm(x)
-        x = nn.tanh(x)
-        x = nn.Dense(x, features=200)
-        x = nn.elu(x)
-        x = nn.Dense(x, features=output_dim)
-        return action_sampler(x, **kwargs)
-
-
-class GaussianPolicy(MLP):
-    # noinspection PyMethodOverriding
+class GaussianPolicy(nn.Module):
     def apply(
         self,
         x,
@@ -87,8 +75,13 @@ class GaussianPolicy(MLP):
         log_sig_min=-20,
         log_sig_max=2,
     ):
-        x = super().apply(x)
+        x = nn.Dense(x, features=200)
+        x = nn.LayerNorm(x)
+        x = nn.tanh(x)
+        x = nn.Dense(x, features=200)
+        x = nn.elu(x)
         x = nn.Dense(x, features=2 * action_dim)
+
         mu, log_sig = jnp.split(x, 2, axis=-1)
         log_sig = nn.softplus(log_sig)
         log_sig = jnp.clip(log_sig, log_sig_min, log_sig_max)

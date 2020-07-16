@@ -1,24 +1,18 @@
 from functools import partial
+
 import jax
-from jax import random
 import jax.numpy as jnp
 from flax import optim
 from haiku import PRNGSequence
-from flax import nn
+from jax import random
 
-from utils import (
-    double_mse,
-    sample_from_multivariate_normal,
-    apply_model,
-    copy_params,
-    sample_model,
-)
-from saving import save_model, load_model
 from models import (
+    build_gaussian_policy_model,
     build_double_critic_model,
     build_constant_model,
-    MLP,
 )
+from saving import save_model, load_model
+from utils import double_mse, apply_model, copy_params
 
 
 def actor_loss_fn(log_alpha, log_p, min_q):
@@ -38,11 +32,13 @@ def get_td_target(
     reward,
     not_done,
     discount,
+    max_action,
     actor,
     critic_target,
     log_alpha,
 ):
     next_action, next_log_p = actor(next_state, sample=True, key=rng)
+
     target_Q1, target_Q2 = critic_target(next_state, next_action)
     target_Q = jnp.minimum(target_Q1, target_Q2) - jnp.exp(log_alpha()) * next_log_p
     target_Q = reward + not_done * discount * target_Q
@@ -96,8 +92,7 @@ class SAC:
         self,
         state_shape,
         action_dim,
-        actor_dim,
-        action_sampler,
+        max_action,
         discount=0.99,
         tau=0.005,
         policy_freq=2,
@@ -110,9 +105,9 @@ class SAC:
 
         actor_input_dim = [((1, *state_shape), jnp.float32)]
 
-        actor = MLP.partial(output_dim=actor_dim, action_sampler=action_sampler)
-        _, init_params = actor.init_by_shape(next(self.rng), actor_input_dim)
-        actor = nn.Model(actor, init_params)
+        actor = build_gaussian_policy_model(
+            actor_input_dim, action_dim, max_action, next(self.rng)
+        )
         actor_optimizer = optim.Adam(learning_rate=lr).create(actor)
         self.actor_optimizer = jax.device_put(actor_optimizer)
 
@@ -135,6 +130,7 @@ class SAC:
         self.log_alpha_optimizer = jax.device_put(log_alpha_optimizer)
         self.target_entropy = -action_dim
 
+        self.max_action = max_action
         self.discount = discount
         self.tau = tau
         self.policy_freq = policy_freq
@@ -145,20 +141,19 @@ class SAC:
     def target_params(self):
         return (
             self.discount,
+            self.max_action,
             self.actor_optimizer.target,
             self.critic_target,
             self.log_alpha_optimizer.target,
         )
 
-    def best_action(self, state):
-        action, _ = apply_model(self.actor_optimizer.target, state)
-        return action
+    def select_action(self, state):
+        mu, _ = apply_model(self.actor_optimizer.target, state)
+        return mu.flatten()
 
-    def sample_action(self, state):
-        action, _ = sample_model(self.actor_optimizer.target, state, key=next(self.rng))
-        return action.flatten()
-        # mu, log_sig = apply_model(self.actor_optimizer.target, state)
-        # return mu + random.normal(rng, mu.shape) * jnp.exp(log_sig)
+    def sample_action(self, rng, state):
+        mu, log_sig = apply_model(self.actor_optimizer.target, state)
+        return mu + random.normal(rng, mu.shape) * jnp.exp(log_sig)
 
     def train(self, replay_buffer, batch_size=100):
         self.total_it += 1

@@ -12,13 +12,13 @@ import TD3
 from arguments import add_arguments
 from envs import Environment
 from utils import ReplayBuffer
+from haiku import PRNGSequence
 
 
 # Runs policy for X episodes and returns average reward
 # A fixed seed is used for the eval environment
 def eval_policy(policy, env_id, seed, render, eval_episodes=10):
-    gym.make("Pendulum-v0")
-    eval_env = gym.make(env_id)
+    eval_env = Environment.wrap(gym.make(env_id))
     eval_env.seed(seed)
 
     avg_reward = 0.0
@@ -28,9 +28,9 @@ def eval_policy(policy, env_id, seed, render, eval_episodes=10):
         while not time_step.last():
             if render:
                 eval_env.render()
-            action = policy.best_action(time_step.observation)
+            action = policy.select_action(time_step.observation)
             time_step = eval_env.step(action)
-            avg_reward += time_step.reward.item()
+            avg_reward += time_step.reward
 
     avg_reward /= eval_episodes
 
@@ -73,27 +73,49 @@ def main(
         os.makedirs("./models")
     if not os.path.exists("./graphs"):
         os.makedirs("./graphs")
-    env = gym.make(env_id)
+    env = Environment.wrap(gym.make(env_id))
     assert isinstance(env, Environment)
     # Set seeds
     np.random.seed(seed)
-    state_shape = env.observation_shape
-    policy = SAC.SAC(
+    state_shape = env.observation_spec().shape
+    action_dim = env.action_spec().shape[0]
+    max_action = env.max_action()
+    kwargs = dict(
         state_shape=state_shape,
-        action_dim=env.action_dim,
-        actor_dim=env.actor_dim,
-        action_sampler=env.sample_action,
+        action_dim=action_dim,
+        max_action=max_action,
         discount=discount,
-        policy_freq=policy_freq,
-        tau=tau,
+        lr=learning_rate,
     )
-    replay_buffer = ReplayBuffer(state_shape, env.action_dim, max_size=int(buffer_size))
+    # Initialize policy
+    if policy == "TD3":
+        # Target policy smoothing is scaled wrt the action scale
+        kwargs.update(
+            policy_noise=policy_noise * max_action,
+            noise_clip=noise_clip * max_action,
+            policy_freq=policy_freq,
+            expl_noise=expl_noise,
+            tau=tau,
+        )
+        policy = TD3.TD3(**kwargs)
+    elif policy == "SAC":
+        kwargs.update(policy_freq=policy_freq, tau=tau)
+        policy = SAC.SAC(**kwargs)
+    elif policy == "MPO":
+        policy = MPO.MPO(**kwargs)
+    if load_model != "":
+        policy_file = file_name if load_model == "default" else load_model
+        policy.load(f"./models/{policy_file}")
+    replay_buffer = ReplayBuffer(state_shape, action_dim, max_size=int(buffer_size))
     # Evaluate untrained policy
     evaluations = [eval_policy(policy=policy, env_id=env_id, seed=seed, render=render)]
     time_step = env.reset()
     episode_reward = 0
     episode_time_steps = 0
     episode_num = 0
+    rng = PRNGSequence(seed)
+    next(rng)
+
     for t in range(int(max_time_steps)):
         episode_time_steps += 1
 
@@ -101,9 +123,15 @@ def main(
 
         # Select action randomly or according to policy
         if t < start_time_steps:
-            action = env.action_space.sample()
+            action = np.random.uniform(
+                env.max_action(), env.min_action(), size=env.action_spec().shape,
+            )
         else:
-            action = policy.sample_action(state)
+            action = (
+                (policy.sample_action(next(rng), state))
+                .clip(-max_action, max_action)
+                .squeeze(0)
+            )
 
         # Perform action
         time_step = env.step(action)
@@ -138,9 +166,7 @@ def main(
 
         # Evaluate episode
         if (t + 1) % eval_freq == 0:
-            evaluations.append(
-                eval_policy(policy=policy, env_id=env_id, seed=seed, render=render)
-            )
+            evaluations.append(eval_policy(policy, env_id, seed, render))
             np.save(f"./results/{file_name}", evaluations)
         if (t + 1) % save_freq == 0:
             if save_model:

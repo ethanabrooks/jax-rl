@@ -61,12 +61,7 @@ def mse(pred, true):
 
 @jax.jit
 def apply_model(model, x, *args, **kwargs):
-    return model(x.reshape(1, -1), *args, **kwargs, sample=False)
-
-
-@jax.jit
-def sample_model(model, x, key, *args, **kwargs):
-    return model(x.reshape(1, -1), *args, **kwargs, key=key, sample=True)
+    return model(x.reshape(1, -1), *args, **kwargs)
 
 
 @jax.jit
