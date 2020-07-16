@@ -184,7 +184,9 @@ def main(
 
 
 if __name__ == "__main__":
-    ray.init(local_mode=True)
     PARSER = argparse.ArgumentParser()
     PARSER.add_argument("config")
-    tune.run(_main, config=getattr(configs, PARSER.parse_args().config))
+    PARSER.add_argument("--local-mode", action="store_true")
+    args = PARSER.parse_args()
+    ray.init(local_mode=args.local_mode)
+    tune.run(_main, config=getattr(configs, args.config))
