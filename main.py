@@ -1,10 +1,11 @@
-import ray
 import argparse
 import itertools
 import os
 
 import gym
 import numpy as np
+import ray
+from haiku import PRNGSequence
 from ray import tune
 from tqdm import tqdm
 
@@ -12,10 +13,8 @@ import MPO
 import SAC
 import TD3
 import configs
-from arguments import add_arguments
 from envs import Environment
 from utils import ReplayBuffer
-from haiku import PRNGSequence
 
 
 # Runs policy for X episodes and returns average reward
@@ -37,17 +36,15 @@ def eval_policy(policy, env_id, seed, render, eval_episodes=10):
 
     avg_reward /= eval_episodes
 
-    print("---------------------------------------")
-    print(f"Evaluation over {eval_episodes} episodes: {avg_reward:.3f}")
-    print("---------------------------------------")
+    tune.report(eval_reward=avg_reward)
     return avg_reward
 
 
-def _main(kwargs):
-    main(**kwargs)
+def _train(kwargs):
+    train(**kwargs)
 
 
-def main(
+def train(
     batch_size=256,
     buffer_size=int(2e6),
     discount=0.99,
@@ -71,15 +68,11 @@ def main(
     render=False,
 ):
     file_name = f"{policy}_{env_id}_{seed}"
-    print("---------------------------------------")
-    print(f"Policy: {policy}, Env: {env_id}, Seed: {seed}")
-    print("---------------------------------------")
-    if not os.path.exists("./results"):
-        os.makedirs("./results")
+    tune.report(policy=policy)
+    tune.report(env=env_id)
+    tune.report(seed=seed)
     if save_model and not os.path.exists("./models"):
         os.makedirs("./models")
-    if not os.path.exists("./graphs"):
-        os.makedirs("./graphs")
     env = Environment.wrap(gym.make(env_id))
     assert isinstance(env, Environment)
     # Set seeds
@@ -116,7 +109,8 @@ def main(
     replay_buffer = ReplayBuffer(state_shape, action_dim, max_size=int(buffer_size))
     # Evaluate untrained policy
 
-    evaluations = [eval_policy(policy=policy, env_id=env_id, seed=seed, render=render)]
+    # evaluations = [eval_policy(policy=policy, env_id=env_id, seed=seed, render=render)]
+    eval_policy(policy=policy, env_id=env_id, seed=seed, render=render)
     time_step = env.reset()
     episode_reward = 0
     episode_time_steps = 0
@@ -162,9 +156,11 @@ def main(
 
         if time_step.last():
             # +1 to account for 0 indexing. +0 on ep_time_steps since it will increment +1 even if done=True
-            print(
-                f"Total T: {t + 1} Episode Num: {episode_num + 1} Episode T: {episode_time_steps} Reward: "
-                f"{episode_reward:.3f}"
+            tune.report(
+                time_steps=t + 1,
+                episode=episode_num + 1,
+                episode_time_steps=episode_time_steps,
+                reward=episode_reward,
             )
             # Reset environment
             time_step = env.reset()
@@ -174,8 +170,7 @@ def main(
 
         # Evaluate episode
         if (t + 1) % eval_freq == 0:
-            evaluations.append(eval_policy(policy, env_id, seed, render))
-            np.save(f"./results/{file_name}", evaluations)
+            eval_policy(policy, env_id, seed, render)
         if (t + 1) % save_freq == 0:
             if save_model:
                 save_path = f"./models/{file_name}_" + str(t + 1)
@@ -183,10 +178,13 @@ def main(
                 policy.save(save_path)
 
 
+def main(config, local_mode):
+    ray.init(local_mode=local_mode)
+    tune.run(_train, config=getattr(configs, config))
+
+
 if __name__ == "__main__":
     PARSER = argparse.ArgumentParser()
     PARSER.add_argument("config")
     PARSER.add_argument("--local-mode", action="store_true")
-    args = PARSER.parse_args()
-    ray.init(local_mode=args.local_mode)
-    tune.run(_main, config=getattr(configs, args.config))
+    main(**vars(PARSER.parse_args()))
