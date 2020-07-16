@@ -12,6 +12,7 @@ import TD3
 from arguments import add_arguments
 from envs import Environment
 from utils import ReplayBuffer
+from haiku import PRNGSequence
 
 
 # Runs policy for X episodes and returns average reward
@@ -112,6 +113,9 @@ def main(
     episode_reward = 0
     episode_time_steps = 0
     episode_num = 0
+    rng = PRNGSequence(seed)
+    next(rng)
+
     for t in range(int(max_time_steps)):
         episode_time_steps += 1
 
@@ -123,7 +127,11 @@ def main(
                 env.max_action(), env.min_action(), size=env.action_spec().shape,
             )
         else:
-            action = (policy.select_action(state)).clip(-max_action, max_action)
+            action = (
+                (policy.sample_action(next(rng), state))
+                .clip(-max_action, max_action)
+                .squeeze(0)
+            )
 
         # Perform action
         time_step = env.step(action)
