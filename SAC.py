@@ -1,17 +1,18 @@
 from functools import partial
+
 import jax
-from jax import random
 import jax.numpy as jnp
 from flax import optim
 from haiku import PRNGSequence
+from jax import random
 
-from utils import double_mse, sample_from_multivariate_normal, apply_model, copy_params
-from saving import save_model, load_model
 from models import (
     build_gaussian_policy_model,
     build_double_critic_model,
     build_constant_model,
 )
+from saving import save_model, load_model
+from utils import double_mse, apply_model, copy_params
 
 
 def actor_loss_fn(log_alpha, log_p, min_q):
