@@ -16,4 +16,4 @@ ENV PATH /opt/conda/envs/jax/bin:$PATH
 COPY entrypoint.sh /
 WORKDIR /jax
 COPY . "/jax"
-CMD ["/entrypoint.sh"]
+ENTRYPOINT ["/entrypoint.sh"]
