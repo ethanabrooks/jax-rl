@@ -37,7 +37,7 @@ def _train(
     expl_noise=0.1,
     learning_rate=3e-4,
     load_model=None,
-    max_time_steps=int(1e6),
+    max_time_steps=None,
     noise_clip=0.5,
     num_action_samples=20,
     policy="SAC",
@@ -133,7 +133,8 @@ def _train(
     rng = PRNGSequence(seed)
     next(rng)
 
-    for t in range(int(max_time_steps)):
+    it = range(int(max_time_steps)) if max_time_steps else itertools.count()
+    for t in it:
         episode_time_steps += 1
 
         state = time_step.observation
