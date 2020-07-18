@@ -1,6 +1,7 @@
 import argparse
 import itertools
 import os
+from pprint import pprint
 
 import gym
 import numpy as np
@@ -14,42 +15,25 @@ import SAC
 import TD3
 import configs
 from envs import Environment
+from levels_env import Env
 from utils import ReplayBuffer
 
 
 # Runs policy for X episodes and returns average reward
 # A fixed seed is used for the eval environment
-def eval_policy(policy, env_id, seed, render, eval_episodes=10):
-    eval_env = Environment.wrap(gym.make(env_id))
-    eval_env.seed(seed)
-
-    avg_reward = 0.0
-    it = itertools.count() if render else tqdm(range(eval_episodes), desc="eval")
-    for _ in it:
-        time_step = eval_env.reset()
-        while not time_step.last():
-            if render:
-                eval_env.render()
-            action = policy.select_action(time_step.observation)
-            time_step = eval_env.step(action)
-            avg_reward += time_step.reward
-
-    avg_reward /= eval_episodes
-
-    tune.report(eval_reward=avg_reward)
-    return avg_reward
 
 
-def _train(kwargs):
-    train(**kwargs)
+def train(kwargs, use_tune):
+    _train(**kwargs, use_tune=use_tune)
 
 
-def train(
+def _train(
     batch_size=256,
     buffer_size=int(2e6),
     discount=0.99,
-    env_id="Pendulum-v0",
+    env_id=None,
     eval_freq=5e3,
+    eval_episodes=10,
     expl_noise=0.1,
     learning_rate=3e-4,
     load_model=None,
@@ -66,14 +50,45 @@ def train(
     tau=0.005,
     train_steps=1,
     render=False,
+    use_tune=True,
 ):
-    file_name = f"{policy}_{env_id}_{seed}"
-    tune.report(policy=policy)
-    tune.report(env=env_id)
-    tune.report(seed=seed)
+    def report(**xx):
+        if use_tune:
+            tune.report(**xx)
+        else:
+            pprint(xx)
+
+    def make_env():
+        return Environment.wrap(gym.make(env_id) if env_id else Env(1000))
+
+    def eval_policy():
+        eval_env = make_env()
+        eval_env.seed(seed)
+
+        avg_reward = 0.0
+        it = itertools.count() if render else tqdm(range(eval_episodes), desc="eval")
+        for _ in it:
+            eval_time_step = eval_env.reset()
+            while not eval_time_step.last():
+                if render:
+                    eval_env.render()
+                action = policy.select_action(eval_time_step.observation)
+                eval_time_step = eval_env.step(action)
+                avg_reward += eval_time_step.reward
+
+        avg_reward /= eval_episodes
+
+        report(eval_reward=avg_reward)
+        return avg_reward
+
+    env_name = env_id or "levels"
+    file_name = f"{policy}_{env_name}_{seed}"
+    report(policy=policy)
+    report(env=env_name)
+    report(seed=seed)
     if save_model and not os.path.exists("./models"):
         os.makedirs("./models")
-    env = Environment.wrap(gym.make(env_id))
+    env = make_env()
     assert isinstance(env, Environment)
     # Set seeds
     np.random.seed(seed)
@@ -87,6 +102,7 @@ def train(
         discount=discount,
         lr=learning_rate,
     )
+
     # Initialize policy
     if policy == "TD3":
         # Target policy smoothing is scaled wrt the action scale
@@ -109,8 +125,7 @@ def train(
     replay_buffer = ReplayBuffer(state_shape, action_dim, max_size=int(buffer_size))
     # Evaluate untrained policy
 
-    # evaluations = [eval_policy(policy=policy, env_id=env_id, seed=seed, render=render)]
-    eval_policy(policy=policy, env_id=env_id, seed=seed, render=render)
+    eval_policy()
     time_step = env.reset()
     episode_reward = 0
     episode_time_steps = 0
@@ -156,7 +171,7 @@ def train(
 
         if time_step.last():
             # +1 to account for 0 indexing. +0 on ep_time_steps since it will increment +1 even if done=True
-            tune.report(
+            report(
                 time_steps=t + 1,
                 episode=episode_num + 1,
                 episode_time_steps=episode_time_steps,
@@ -170,7 +185,7 @@ def train(
 
         # Evaluate episode
         if (t + 1) % eval_freq == 0:
-            eval_policy(policy, env_id, seed, render)
+            eval_policy()
         if (t + 1) % save_freq == 0:
             if save_model:
                 save_path = f"./models/{file_name}_" + str(t + 1)
@@ -178,13 +193,17 @@ def train(
                 policy.save(save_path)
 
 
-def main(config, local_mode):
-    ray.init(local_mode=local_mode)
-    tune.run(_train, config=getattr(configs, config))
+def main(config, use_tune, local_mode):
+    if use_tune:
+        ray.init(local_mode=local_mode)
+        tune.run(train, config=getattr(configs, config))
+    else:
+        train(getattr(configs, config), use_tune=use_tune)
 
 
 if __name__ == "__main__":
     PARSER = argparse.ArgumentParser()
     PARSER.add_argument("config")
+    PARSER.add_argument("--no-tune", dest="use_tune", action="store_false")
     PARSER.add_argument("--local-mode", action="store_true")
     main(**vars(PARSER.parse_args()))
