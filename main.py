@@ -196,7 +196,7 @@ def _train(
 
 def main(config, use_tune, **kwargs):
     if use_tune:
-        ray.init(webui_host="127.0.0.1")
+        ray.init(webui_host="127.0.0.1", **kwargs)
         tune.run(train, config=getattr(configs, config))
     else:
         train(getattr(configs, config), use_tune=use_tune)
@@ -207,5 +207,5 @@ if __name__ == "__main__":
     PARSER.add_argument("config")
     PARSER.add_argument("--no-tune", dest="use_tune", action="store_false")
     PARSER.add_argument("--local-mode", action="store_true")
-    PARSER.add_argument("--dashboard-host")
+    PARSER.add_argument("--num-samples", type=int)
     main(**vars(PARSER.parse_args()))

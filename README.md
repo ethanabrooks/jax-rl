@@ -23,10 +23,3 @@ python main_dm_control.py --max_timestep 100000
 python main_dm_control.py --policy SAC --max_timesteps 100000
 ```
 
-```
-redis-server --port 6379 --daemonize yes
-ipython
-  import redis
-  r = redis.Redis(host='localhost', port=6379)
-  r.set('a', 'b')
-```

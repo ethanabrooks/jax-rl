@@ -16,6 +16,4 @@ ENV PATH /opt/conda/envs/jax/bin:$PATH
 COPY entrypoint.sh /
 WORKDIR /jax
 COPY . "/jax"
-RUN apt-get update && apt-get install -y redis
-EXPOSE 6379
-#ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/entrypoint.sh"]

@@ -1,4 +1,3 @@
 #! /usr/bin/env bash
-/bin/bash
-#python main.py search
+python main.py search --num-samples=16
 
