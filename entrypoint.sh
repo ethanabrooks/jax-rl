@@ -1,3 +1,4 @@
 #! /usr/bin/env bash
-python main.py $@
+/bin/bash
+#python main.py search
 
