@@ -197,21 +197,23 @@ def _train(
 
 
 def main(config, use_tune, num_samples, local_mode, **kwargs):
+    config = getattr(configs, config)
     if use_tune:
         ray.init(webui_host="127.0.0.1", local_mode=local_mode, **kwargs)
         metric = "eval_reward"
-        config = getattr(configs, config)
         if local_mode:
             tune.run(train, config=config)
         else:
             tune.run(
                 train,
+                config=config,
+                resources_per_trial={"gpu": 1},
                 # scheduler=ASHAScheduler(metric=metric, mode="max"),
-                search_alg=HyperOptSearch(config, metric=metric, mode="max"),
+                # search_alg=HyperOptSearch(config, metric=metric, mode="max"),
                 num_samples=num_samples,
             )
     else:
-        train(getattr(configs, config), use_tune=use_tune)
+        train(config, use_tune=use_tune)
 
 
 if __name__ == "__main__":

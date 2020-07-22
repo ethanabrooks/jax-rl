@@ -10,6 +10,8 @@ COPY ./environment.yml /tmp/environment.yml
 RUN conda env update -f /tmp/environment.yml \
     && conda clean --all -y
 
+RUN apt-get update && apt-get install -y rsync  && rm -rf /var/lib/apt/lists/*
+
 RUN echo "source activate base" >> /root/.bashrc
 ENV PATH /opt/conda/envs/jax/bin:$PATH
 
