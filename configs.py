@@ -15,6 +15,7 @@ search = dict(
     batch_size=tune.choice(big_values(6, 10)),
     policy_freq=tune.choice([1, 2, 3]),
     tau=tune.choice(small_values(2, 5)),
+    seed=tune.randn(20),
 )
 
 deterministic = dict(policy="SAC", max_time_steps=100000)
