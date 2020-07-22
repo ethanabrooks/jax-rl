@@ -196,17 +196,20 @@ def _train(
                 policy.save(save_path)
 
 
-def main(config, use_tune, num_samples, **kwargs):
+def main(config, use_tune, num_samples, local_mode, **kwargs):
     if use_tune:
-        ray.init(webui_host="127.0.0.1", **kwargs)
+        ray.init(webui_host="127.0.0.1", local_mode=local_mode, **kwargs)
         metric = "eval_reward"
         config = getattr(configs, config)
-        tune.run(
-            train,
-            scheduler=ASHAScheduler(metric=metric, mode="max"),
-            search_alg=HyperOptSearch(config, metric=metric, mode="max"),
-            num_samples=num_samples,
-        )
+        if local_mode:
+            tune.run(train, config=config)
+        else:
+            tune.run(
+                train,
+                scheduler=ASHAScheduler(metric=metric, mode="max"),
+                search_alg=HyperOptSearch(config, metric=metric, mode="max"),
+                num_samples=num_samples,
+            )
     else:
         train(getattr(configs, config), use_tune=use_tune)
 
