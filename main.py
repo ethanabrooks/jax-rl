@@ -194,10 +194,10 @@ def _train(
                 policy.save(save_path)
 
 
-def main(config, use_tune, **kwargs):
+def main(config, use_tune, num_samples, **kwargs):
     if use_tune:
         ray.init(webui_host="127.0.0.1", **kwargs)
-        tune.run(train, config=getattr(configs, config))
+        tune.run(train, config=getattr(configs, config), num_samples=num_samples)
     else:
         train(getattr(configs, config), use_tune=use_tune)
 
