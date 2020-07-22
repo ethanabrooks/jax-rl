@@ -116,8 +116,6 @@ def _train(
         policy = TD3.TD3(**kwargs)
     elif policy == "SAC":
         kwargs.update(policy_freq=policy_freq, tau=tau)
-        pprint(kwargs)
-        input("waiting")
         policy = SAC.SAC(**kwargs)
     elif policy == "MPO":
         policy = MPO.MPO(**kwargs)
