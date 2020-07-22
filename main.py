@@ -54,6 +54,8 @@ def _train(
     render=False,
     use_tune=True,
 ):
+    seed = int(seed)
+
     def report(**xx):
         if use_tune:
             tune.report(**xx)
@@ -200,7 +202,7 @@ def main(config, use_tune, num_samples, local_mode, **kwargs):
     config = getattr(configs, config)
     if use_tune:
         ray.init(webui_host="127.0.0.1", local_mode=local_mode, **kwargs)
-        metric = "eval_reward"
+        metric = "reward"
         if local_mode:
             tune.run(train, config=config)
         else:
@@ -208,7 +210,7 @@ def main(config, use_tune, num_samples, local_mode, **kwargs):
                 train,
                 config=config,
                 resources_per_trial={"gpu": 1},
-                # scheduler=ASHAScheduler(metric=metric, mode="max"),
+                scheduler=ASHAScheduler(metric=metric, mode="max"),
                 # search_alg=HyperOptSearch(config, metric=metric, mode="max"),
                 num_samples=num_samples,
             )
