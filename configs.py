@@ -1,5 +1,6 @@
 from ray import tune
 import numpy as np
+from hyperopt import hp
 
 
 def small_values(start, stop):
@@ -11,11 +12,11 @@ def big_values(start, stop):
 
 
 search = dict(
-    learning_rate=tune.choice(small_values(2, 5)),
-    batch_size=tune.choice(big_values(6, 10)),
-    policy_freq=tune.choice([1, 2, 3]),
-    tau=tune.choice(small_values(2, 5)),
-    seed=tune.sample_from(lambda _: int(np.random.randint(20))),
+    learning_rate=hp.choice("learning_rate", small_values(2, 5)),
+    batch_size=hp.choice("batch_size", big_values(6, 10)),
+    policy_freq=hp.choice("policy_freq", [1, 2, 3]),
+    tau=hp.choice("tau", small_values(2, 5)),
+    seed=hp.randint("seed", 20),
 )
 
 deterministic = dict(policy="SAC", max_time_steps=100000)

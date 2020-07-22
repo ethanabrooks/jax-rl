@@ -210,8 +210,8 @@ def main(config, use_tune, num_samples, local_mode, **kwargs):
                 train,
                 config=config,
                 resources_per_trial={"gpu": 1},
-                scheduler=ASHAScheduler(metric=metric, mode="max"),
-                # search_alg=HyperOptSearch(config, metric=metric, mode="max"),
+                # scheduler=ASHAScheduler(metric=metric, mode="max"),
+                search_alg=HyperOptSearch(config, metric=metric, mode="max"),
                 num_samples=num_samples,
             )
     else:
