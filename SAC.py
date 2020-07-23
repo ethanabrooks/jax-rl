@@ -1,4 +1,7 @@
+import itertools
+from dataclasses import dataclass
 from functools import partial
+from typing import Union
 
 import jax
 import jax.numpy as jnp
@@ -13,6 +16,14 @@ from models import (
 )
 from saving import save_model, load_model
 from utils import double_mse, apply_model, copy_params
+
+
+@dataclass
+class Optimizers:
+    T = Union[optim.Adam, optim.Optimizer]
+    actor: T
+    critic: T
+    log_alpha: T
 
 
 def actor_loss_fn(log_alpha, log_p, min_q):
@@ -93,6 +104,7 @@ class SAC:
         state_shape,
         action_dim,
         max_action,
+        save_freq,
         discount=0.99,
         tau=0.005,
         policy_freq=2,
@@ -105,100 +117,117 @@ class SAC:
 
         actor_input_dim = [((1, *state_shape), jnp.float32)]
 
-        actor = build_gaussian_policy_model(
+        self.actor = build_gaussian_policy_model(
             actor_input_dim, action_dim, max_action, next(self.rng)
         )
-        actor_optimizer = optim.Adam(learning_rate=lr).create(actor)
-        self.actor_optimizer = jax.device_put(actor_optimizer)
 
         init_rng = next(self.rng)
 
-        critic_input_dim = [
+        self.critic_input_dim = [
             ((1, *state_shape), jnp.float32),
             ((1, action_dim), jnp.float32),
         ]
-
-        critic = build_double_critic_model(critic_input_dim, init_rng)
-        self.critic_target = build_double_critic_model(critic_input_dim, init_rng)
-        critic_optimizer = optim.Adam(learning_rate=lr).create(critic)
-        self.critic_optimizer = jax.device_put(critic_optimizer)
-
+        self.critic = build_double_critic_model(self.critic_input_dim, init_rng)
         self.entropy_tune = entropy_tune
-
-        log_alpha = build_constant_model(-3.5, next(self.rng))
-        log_alpha_optimizer = optim.Adam(learning_rate=lr).create(log_alpha)
-        self.log_alpha_optimizer = jax.device_put(log_alpha_optimizer)
+        self.log_alpha = build_constant_model(-3.5, next(self.rng))
         self.target_entropy = -action_dim
+
+        self.adam = Optimizers(
+            actor=optim.Adam(learning_rate=lr),
+            critic=optim.Adam(learning_rate=lr),
+            log_alpha=optim.Adam(learning_rate=lr),
+        )
+        self.optimizer = None
 
         self.max_action = max_action
         self.discount = discount
         self.tau = tau
         self.policy_freq = policy_freq
+        self.save_freq = save_freq
 
         self.total_it = 0
+        self.iterator = self.generator()
+        next(self.iterator)
 
-    @property
-    def target_params(self):
-        return (
-            self.discount,
-            self.max_action,
-            self.actor_optimizer.target,
-            self.critic_target,
-            self.log_alpha_optimizer.target,
+    def generator(self, load_path=None):
+        critic_target = build_double_critic_model(self.critic_input_dim, next(self.rng))
+        self.optimizer = Optimizers(
+            actor=(self.adam.actor.create(self.actor)),
+            critic=(self.adam.critic.create(self.critic)),
+            log_alpha=(self.adam.log_alpha.create(self.log_alpha)),
         )
+        if load_path:
+            self.optimizer = Optimizers(
+                actor=load_model(load_path + "_actor", self.optimizer.actor),
+                critic=load_model(load_path + "_critic", self.optimizer.critic),
+                log_alpha=load_model(
+                    load_path + "_log_alpha", self.optimizer.log_alpha
+                ),
+            )
+            critic_target = critic_target.replace(
+                params=self.optimizer.critic.target.params
+            )
+
+        self.optimizer.actor = jax.device_put(self.optimizer.actor)
+        self.optimizer.critic = jax.device_put(self.optimizer.critic)
+        self.optimizer.log_alpha = jax.device_put(self.optimizer.log_alpha)
+
+        for i in itertools.count():
+
+            training_data = yield
+
+            target_Q = jax.lax.stop_gradient(
+                get_td_target(
+                    next(self.rng),
+                    *training_data,
+                    discount=self.discount,
+                    max_action=self.max_action,
+                    actor=self.optimizer.actor.target,
+                    critic_target=critic_target,
+                    log_alpha=self.optimizer.log_alpha.target
+                )
+            )
+
+            state, action, _, _, _ = training_data
+
+            self.optimizer.critic = critic_step(
+                self.optimizer.critic, state, action, target_Q
+            )
+
+            if i % self.policy_freq == 0:
+                self.optimizer.actor, log_p = actor_step(
+                    next(self.rng),
+                    self.optimizer.actor,
+                    self.optimizer.critic,
+                    state,
+                    self.optimizer.actor,
+                )
+
+                if self.entropy_tune:
+                    self.optimizer.log_alpha = alpha_step(
+                        self.optimizer.log_alpha, log_p, self.target_entropy
+                    )
+
+                critic_target = copy_params(
+                    self.optimizer.critic.target, critic_target, self.tau
+                )
+            if i % self.save_freq == 0:
+                save_model(load_path + "_critic", self.optimizer.critic)
+                save_model(load_path + "_actor", self.optimizer.actor)
+                save_model(load_path + "_log_alpha", self.optimizer.log_alpha)
 
     def select_action(self, state):
-        mu, _ = apply_model(self.actor_optimizer.target, state)
+        mu, _ = apply_model(self.optimizer.actor.target, state)
         return mu.flatten()
 
     def sample_action(self, rng, state):
-        mu, log_sig = apply_model(self.actor_optimizer.target, state)
+        mu, log_sig = apply_model(self.optimizer.actor.target, state)
         return mu + random.normal(rng, mu.shape) * jnp.exp(log_sig)
 
-    def train(self, replay_buffer, batch_size=100):
-        self.total_it += 1
+    def train(self, replay_buffer, batch_size=100, load_path=None):
+        if self.iterator is None:
+            self.iterator = self.generator(load_path=load_path)
+            next(self.iterator)
 
-        buffer_out = replay_buffer.sample(next(self.rng), batch_size)
-
-        target_Q = jax.lax.stop_gradient(
-            get_td_target(next(self.rng), *buffer_out, *self.target_params)
-        )
-
-        state, action, _, _, _ = buffer_out
-
-        self.critic_optimizer = critic_step(
-            self.critic_optimizer, state, action, target_Q
-        )
-
-        if self.total_it % self.policy_freq == 0:
-
-            self.actor_optimizer, log_p = actor_step(
-                next(self.rng),
-                self.actor_optimizer,
-                self.critic_optimizer,
-                state,
-                self.log_alpha_optimizer,
-            )
-
-            if self.entropy_tune:
-                self.log_alpha_optimizer = alpha_step(
-                    self.log_alpha_optimizer, log_p, self.target_entropy
-                )
-
-            self.critic_target = copy_params(
-                self.critic_optimizer.target, self.critic_target, self.tau
-            )
-
-    def save(self, filename):
-        save_model(filename + "_critic", self.critic_optimizer)
-        save_model(filename + "_actor", self.actor_optimizer)
-
-    def load(self, filename):
-        self.critic_optimizer = load_model(filename + "_critic", self.critic_optimizer)
-        self.critic_optimizer = jax.device_put(self.critic_optimizer)
-        self.critic_target = self.critic_target.replace(
-            params=self.critic_optimizer.target.params
-        )
-
-        self.actor_optimizer = load_model(filename + "_actor", self.actor_optimizer)
-        self.actor_optimizer = jax.device_put(self.actor_optimizer)
+        data = replay_buffer.sample(next(self.rng), batch_size)
+        return self.iterator.send(data)

@@ -11,9 +11,7 @@ from ray import tune
 from ray.tune.suggest.hyperopt import HyperOptSearch
 from tqdm import tqdm
 
-import MPO
 import SAC
-import TD3
 import configs
 from envs import Environment
 from levels_env import Env
@@ -37,15 +35,10 @@ class Trainer:
         env_id=None,
         eval_freq=5e3,
         eval_episodes=10,
-        expl_noise=0.1,
         learning_rate=3e-4,
         load_model=None,
         max_time_steps=None,
-        noise_clip=0.5,
-        num_action_samples=20,
-        policy="SAC",
         policy_freq=2,
-        policy_noise=0.2,
         save_freq=int(5e3),
         save_model=True,
         seed=0,
@@ -56,6 +49,7 @@ class Trainer:
         use_tune=True,
     ):
         seed = int(seed)
+        policy = "SAC"
 
         def report(**xx):
             if use_tune:
@@ -102,37 +96,21 @@ class Trainer:
         state_shape = env.observation_spec().shape
         action_dim = env.action_spec().shape[0]
         max_action = env.max_action()
-        kwargs = dict(
+        # Initialize policy
+        policy = SAC.SAC(
             state_shape=state_shape,
             action_dim=action_dim,
             max_action=max_action,
+            save_freq=save_freq,
             discount=discount,
             lr=learning_rate,
+            policy_freq=policy_freq,
+            tau=tau,
         )
-
-        # Initialize policy
-        if policy == "TD3":
-            # Target policy smoothing is scaled wrt the action scale
-            kwargs.update(
-                policy_noise=policy_noise * max_action,
-                noise_clip=noise_clip * max_action,
-                policy_freq=policy_freq,
-                expl_noise=expl_noise,
-                tau=tau,
-            )
-            policy = TD3.TD3(**kwargs)
-        elif policy == "SAC":
-            kwargs.update(policy_freq=policy_freq, tau=tau)
-            policy = SAC.SAC(**kwargs)
-        elif policy == "MPO":
-            policy = MPO.MPO(**kwargs)
-        if load_model is not None:
-            policy_file = file_name if load_model == "default" else load_model
-            policy.load(f"./models/{policy_file}")
         replay_buffer = ReplayBuffer(state_shape, action_dim, max_size=int(buffer_size))
         # Evaluate untrained policy
 
-        eval_policy()
+        # eval_policy()
         time_step = env.reset()
         episode_reward = 0
         episode_time_steps = 0
@@ -172,10 +150,7 @@ class Trainer:
             # Train agent after collecting sufficient data
             if t >= start_time_steps:
                 for _ in range(train_steps):
-                    if policy == "MPO":
-                        policy.train(replay_buffer, batch_size, num_action_samples)
-                    else:
-                        policy.train(replay_buffer, batch_size)
+                    policy.train(replay_buffer, batch_size)
 
             if time_step.last():
                 # +1 to account for 0 indexing. +0 on ep_time_steps since it will increment +1 even if done=True
@@ -192,13 +167,8 @@ class Trainer:
                 episode_num += 1
 
             # Evaluate episode
-            if (t + 1) % eval_freq == 0:
-                eval_policy()
-            if (t + 1) % save_freq == 0:
-                if save_model:
-                    save_path = f"./models/{file_name}_" + str(t + 1)
-                    print(f"Saving model to {save_path}")
-                    policy.save(save_path)
+            # if (t + 1) % eval_freq == 0:
+            #     eval_policy()
 
 
 def main(config, use_tune, num_samples, local_mode, env, **kwargs):
