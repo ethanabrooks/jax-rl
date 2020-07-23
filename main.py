@@ -183,7 +183,7 @@ def main(config, use_tune, num_samples, local_mode, env, load_path):
             tune.run(
                 train,
                 config=config,
-                resources_per_trial={"gpu": 1},
+                resources_per_trial={"gpu": 1, "cpu": 2},
                 # scheduler=ASHAScheduler(metric=metric, mode="max"),
                 search_alg=HyperOptSearch(config, metric=metric, mode="max"),
                 num_samples=num_samples,
