@@ -198,8 +198,9 @@ def _train(
                 policy.save(save_path)
 
 
-def main(config, use_tune, num_samples, local_mode, **kwargs):
+def main(config, use_tune, num_samples, local_mode, env, **kwargs):
     config = getattr(configs, config)
+    config.update(env_id=env)
     if use_tune:
         ray.init(webui_host="127.0.0.1", local_mode=local_mode, **kwargs)
         metric = "reward"
@@ -224,4 +225,5 @@ if __name__ == "__main__":
     PARSER.add_argument("--no-tune", dest="use_tune", action="store_false")
     PARSER.add_argument("--local-mode", action="store_true")
     PARSER.add_argument("--num-samples", type=int)
+    PARSER.add_argument("--env")
     main(**vars(PARSER.parse_args()))
