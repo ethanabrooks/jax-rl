@@ -111,10 +111,10 @@ class Trainer:
             policy_freq=policy_freq,
             tau=tau,
         )
+        self.rng = PRNGSequence(self.seed)
 
     def train(self):
-        rng = PRNGSequence(self.seed)
-        iterator = self.generator(rng)
+        iterator = self.generator()
         max_action = self.env.max_action()
         state = next(iterator)
         for t in itertools.count():
@@ -125,7 +125,7 @@ class Trainer:
                 action = self.env.action_space.sample()
             else:
                 action = (
-                    (self.policy.sample_action(next(rng), state))
+                    (self.policy.sample_action(next(self.rng), state))
                     .clip(-max_action, max_action)
                     .squeeze(0)
                 )
@@ -137,7 +137,7 @@ class Trainer:
         else:
             pprint(**kwargs)
 
-    def generator(self, rng):
+    def generator(self):
         time_step = self.env.reset()
         episode_reward = 0
         episode_time_steps = 0
@@ -146,7 +146,7 @@ class Trainer:
         state_shape = self.env.observation_spec().shape
         action_dim = self.env.action_spec().shape[0]
         replay_buffer = ReplayBuffer(state_shape, action_dim, max_size=self.buffer_size)
-        next(rng)
+        next(self.rng)
 
         for t in (
             range(int(self.max_time_steps))
