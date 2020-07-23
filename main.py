@@ -23,7 +23,7 @@ from utils import ReplayBuffer
 
 
 def train(kwargs, use_tune):
-    Trainer(**kwargs, use_tune=use_tune)
+    Trainer(**kwargs, use_tune=use_tune).train()
 
 
 class Trainer:
@@ -50,12 +50,14 @@ class Trainer:
     ):
         seed = int(seed)
         policy = "SAC"
-
-        def report(**xx):
-            if use_tune:
-                tune.report(**xx)
-            else:
-                pprint(xx)
+        self.use_tune = use_tune
+        self.seed = seed
+        self.max_time_steps = max_time_steps
+        self.start_time_steps = start_time_steps
+        self.train_steps = train_steps
+        self.batch_size = batch_size
+        self.buffer_size = buffer_size
+        self.eval_freq = eval_freq
 
         def make_env():
             return Environment.wrap(gym.make(env_id) if env_id else Env(1000))
@@ -79,17 +81,19 @@ class Trainer:
 
             avg_reward /= eval_episodes
 
-            report(eval_reward=avg_reward)
+            self.report(eval_reward=avg_reward)
             return avg_reward
+
+        self.eval_policy = eval_policy
 
         env_name = env_id or "levels"
         file_name = f"{policy}_{env_name}_{seed}"
-        report(policy=policy)
-        report(env=env_name)
-        report(seed=seed)
+        self.report(policy=policy)
+        self.report(env=env_name)
+        self.report(seed=seed)
         if save_model and not os.path.exists("./models"):
             os.makedirs("./models")
-        env = make_env()
+        self.env = env = make_env()
         assert isinstance(env, Environment)
         # Set seeds
         np.random.seed(seed)
@@ -97,7 +101,7 @@ class Trainer:
         action_dim = env.action_spec().shape[0]
         max_action = env.max_action()
         # Initialize policy
-        policy = SAC.SAC(
+        self.policy = policy = SAC.SAC(  # TODO
             state_shape=state_shape,
             action_dim=action_dim,
             max_action=max_action,
@@ -107,37 +111,56 @@ class Trainer:
             policy_freq=policy_freq,
             tau=tau,
         )
-        replay_buffer = ReplayBuffer(state_shape, action_dim, max_size=int(buffer_size))
-        # Evaluate untrained policy
 
-        eval_policy()
-        time_step = env.reset()
-        episode_reward = 0
-        episode_time_steps = 0
-        episode_num = 0
-        rng = PRNGSequence(seed)
-        next(rng)
+    def train(self):
+        rng = PRNGSequence(self.seed)
+        iterator = self.generator(rng)
+        max_action = self.env.max_action()
+        state = next(iterator)
+        for t in itertools.count():
+            if t % self.eval_freq == 0:
+                self.eval_policy()
 
-        it = range(int(max_time_steps)) if max_time_steps else itertools.count()
-        for t in it:
-            episode_time_steps += 1
-
-            state = time_step.observation
-
-            # Select action randomly or according to policy
-            if t < start_time_steps:
-                action = np.random.uniform(
-                    env.max_action(), env.min_action(), size=env.action_spec().shape,
-                )
+            if t < self.start_time_steps:
+                action = self.env.action_space.sample()
             else:
                 action = (
-                    (policy.sample_action(next(rng), state))
+                    (self.policy.sample_action(next(rng), state))
                     .clip(-max_action, max_action)
                     .squeeze(0)
                 )
+            state = iterator.send(action)
+
+    def report(self, **kwargs):
+        if self.use_tune:
+            tune.report(**kwargs)
+        else:
+            pprint(**kwargs)
+
+    def generator(self, rng):
+        time_step = self.env.reset()
+        episode_reward = 0
+        episode_time_steps = 0
+        episode_num = 0
+
+        state_shape = self.env.observation_spec().shape
+        action_dim = self.env.action_spec().shape[0]
+        replay_buffer = ReplayBuffer(state_shape, action_dim, max_size=self.buffer_size)
+        next(rng)
+
+        for t in (
+            range(int(self.max_time_steps))
+            if self.max_time_steps
+            else itertools.count()
+        ):
+            episode_time_steps += 1
+            state = time_step.observation
+
+            # Select action randomly or according to policy
+            action = yield state
 
             # Perform action
-            time_step = env.step(action)
+            time_step = self.env.step(action)
             done_bool = float(time_step.last())
 
             # Store data in replay buffer
@@ -148,27 +171,23 @@ class Trainer:
             episode_reward += time_step.reward
 
             # Train agent after collecting sufficient data
-            if t >= start_time_steps:
-                for _ in range(train_steps):
-                    policy.train(replay_buffer, batch_size)
+            if t >= self.start_time_steps:
+                for _ in range(self.train_steps):
+                    self.policy.train(replay_buffer, self.batch_size)
 
             if time_step.last():
                 # +1 to account for 0 indexing. +0 on ep_time_steps since it will increment +1 even if done=True
-                report(
+                self.report(
                     time_steps=t + 1,
                     episode=episode_num + 1,
                     episode_time_steps=episode_time_steps,
                     reward=episode_reward,
                 )
                 # Reset environment
-                time_step = env.reset()
+                time_step = self.env.reset()
                 episode_reward = 0
                 episode_time_steps = 0
                 episode_num += 1
-
-            # Evaluate episode
-            if (t + 1) % eval_freq == 0:
-                eval_policy()
 
 
 def main(config, use_tune, num_samples, local_mode, env, load_path):
