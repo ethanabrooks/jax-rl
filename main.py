@@ -36,7 +36,7 @@ class Trainer:
         eval_freq=5e3,
         eval_episodes=10,
         learning_rate=3e-4,
-        load_model=None,
+        load_path=None,
         max_time_steps=None,
         policy_freq=2,
         save_freq=int(5e3),
@@ -110,7 +110,7 @@ class Trainer:
         replay_buffer = ReplayBuffer(state_shape, action_dim, max_size=int(buffer_size))
         # Evaluate untrained policy
 
-        # eval_policy()
+        eval_policy()
         time_step = env.reset()
         episode_reward = 0
         episode_time_steps = 0
@@ -167,15 +167,15 @@ class Trainer:
                 episode_num += 1
 
             # Evaluate episode
-            # if (t + 1) % eval_freq == 0:
-            #     eval_policy()
+            if (t + 1) % eval_freq == 0:
+                eval_policy()
 
 
-def main(config, use_tune, num_samples, local_mode, env, **kwargs):
+def main(config, use_tune, num_samples, local_mode, env, load_path):
     config = getattr(configs, config)
-    config.update(env_id=env)
+    config.update(env_id=env, load_path=load_path)
     if use_tune:
-        ray.init(webui_host="127.0.0.1", local_mode=local_mode, **kwargs)
+        ray.init(webui_host="127.0.0.1", local_mode=local_mode)
         metric = "reward"
         if local_mode:
             tune.run(train, config=config)
@@ -199,4 +199,5 @@ if __name__ == "__main__":
     PARSER.add_argument("--local-mode", action="store_true")
     PARSER.add_argument("--num-samples", type=int)
     PARSER.add_argument("--env")
+    PARSER.add_argument("--load-path")
     main(**vars(PARSER.parse_args()))

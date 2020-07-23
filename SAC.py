@@ -174,7 +174,7 @@ class SAC:
 
         for i in itertools.count():
 
-            training_data = yield
+            state, action, _, _, _ = training_data = yield
 
             target_Q = jax.lax.stop_gradient(
                 get_td_target(
@@ -188,30 +188,33 @@ class SAC:
                 )
             )
 
-            state, action, _, _, _ = training_data
-
             self.optimizer.critic = critic_step(
-                self.optimizer.critic, state, action, target_Q
+                optimizer=self.optimizer.critic,
+                state=state,
+                action=action,
+                target_Q=target_Q,
             )
 
             if i % self.policy_freq == 0:
                 self.optimizer.actor, log_p = actor_step(
-                    next(self.rng),
-                    self.optimizer.actor,
-                    self.optimizer.critic,
-                    state,
-                    self.optimizer.actor,
+                    rng=next(self.rng),
+                    optimizer=self.optimizer.actor,
+                    critic=self.optimizer.critic,
+                    state=state,
+                    log_alpha=self.optimizer.log_alpha,
                 )
 
                 if self.entropy_tune:
                     self.optimizer.log_alpha = alpha_step(
-                        self.optimizer.log_alpha, log_p, self.target_entropy
+                        optimizer=self.optimizer.log_alpha,
+                        log_p=log_p,
+                        target_entropy=self.target_entropy,
                     )
 
                 critic_target = copy_params(
                     self.optimizer.critic.target, critic_target, self.tau
                 )
-            if i % self.save_freq == 0:
+            if load_path and i % self.save_freq == 0:
                 save_model(load_path + "_critic", self.optimizer.critic)
                 save_model(load_path + "_actor", self.optimizer.actor)
                 save_model(load_path + "_log_alpha", self.optimizer.log_alpha)
