@@ -62,7 +62,7 @@ class Trainer:
         def make_env():
             return Environment.wrap(gym.make(env_id) if env_id else Env(1000))
 
-        def eval_policy():
+        def eval_policy(params):
             eval_env = make_env()
             eval_env.seed(seed)
 
@@ -75,10 +75,7 @@ class Trainer:
                 while not eval_time_step.last():
                     if render:
                         eval_env.render()
-                    import ipdb
-
-                    ipdb.set_trace()
-                    action = policy.select_action(eval_time_step.observation)
+                    action = policy.step(params, eval_time_step.observation)
                     eval_time_step = eval_env.step(action)
                     avg_reward += eval_time_step.reward
 
@@ -117,31 +114,28 @@ class Trainer:
         self.rng = PRNGSequence(self.seed)
 
     def train(self):
-        iterator = self.generator()
         max_action = self.env.max_action()
-        state = next(iterator)
+        time_step = self.env.reset()
+        iterator = self.generator(time_step)
+        state, params = next(iterator)
         for t in itertools.count():
             if t % self.eval_freq == 0:
-                self.eval_policy()
+                self.eval_policy(params)
 
-            if t < self.start_time_steps:
+            if t < 0:  # TODO: self.start_time_steps:
                 action = self.env.action_space.sample()
             else:
-                action = (
-                    (self.policy.sample_action(next(self.rng), state))
-                    .clip(-max_action, max_action)
-                    .squeeze(0)
-                )
-            state = iterator.send(action)
+                action = self.policy.step(params, state, next(self.rng))
+                action = action.clip(-max_action, max_action)
+            state, params = iterator.send(action)
 
     def report(self, **kwargs):
         if self.use_tune:
             tune.report(**kwargs)
         else:
-            pprint(**kwargs)
+            pprint(kwargs)
 
-    def generator(self):
-        time_step = self.env.reset()
+    def generator(self, time_step):
         episode_reward = 0
         episode_time_steps = 0
         episode_num = 0
@@ -150,7 +144,11 @@ class Trainer:
         action_dim = self.env.action_spec().shape[0]
         replay_buffer = ReplayBuffer(state_shape, action_dim, max_size=self.buffer_size)
         next(self.rng)
+        iterator = self.policy.generator(
+            self.env.observation_space.sample(), self.env.action_space.sample()
+        )
 
+        params = next(iterator)
         for t in (
             range(int(self.max_time_steps))
             if self.max_time_steps
@@ -160,7 +158,7 @@ class Trainer:
             state = time_step.observation
 
             # Select action randomly or according to policy
-            action = yield state
+            action = yield state, params.actor
 
             # Perform action
             time_step = self.env.step(action)
@@ -174,9 +172,10 @@ class Trainer:
             episode_reward += time_step.reward
 
             # Train agent after collecting sufficient data
-            if t >= self.start_time_steps:
+            if t >= 0:  # TODO: self.start_time_steps:
                 for _ in range(self.train_steps):
-                    self.policy.train(replay_buffer, self.batch_size)
+                    data = replay_buffer.sample(next(self.rng), self.batch_size)
+                    params = iterator.send(data)
 
             if time_step.last():
                 # +1 to account for 0 indexing. +0 on ep_time_steps since it will increment +1 even if done=True

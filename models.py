@@ -8,8 +8,10 @@ import haiku as hk
 
 
 class DoubleCritic(hk.Module):
-    def __call__(self, state, action) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        state_action = jnp.concatenate([state, action], axis=1)
+    def __call__(
+        self, state: jnp.ndarray, action: jnp.ndarray
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        state_action = jnp.concatenate([state, action], axis=-1)
 
         q1 = hk.Linear(500)(state_action)
         # q1 = hk.LayerNorm(q1)
@@ -33,7 +35,12 @@ class DoubleCritic(hk.Module):
 
 class GaussianPolicy(hk.Module):
     def __init__(
-        self, action_dim, max_action, mpo=False, log_sig_min=-20, log_sig_max=2,
+        self,
+        action_dim: int,
+        max_action,
+        mpo=False,
+        log_sig_min: float = -20,
+        log_sig_max: float = 2,
     ):
         super().__init__()
         self.max_action = max_action
@@ -42,9 +49,7 @@ class GaussianPolicy(hk.Module):
         self.log_sig_max = log_sig_max
         self.log_sig_min = log_sig_min
 
-    def __call__(
-        self, x, key=None, sample=False,
-    ):
+    def __call__(self, x, key=None):
         x = hk.Linear(200)(x)
         # x = hk.LayerNorm(x)
         x = nn.relu(x)
@@ -59,7 +64,7 @@ class GaussianPolicy(hk.Module):
         if self.MPO:
             return mu, log_sig
 
-        if not sample:
+        if key is None:
             return self.max_action * jnp.tanh(mu), log_sig
         else:
             sig = jnp.exp(log_sig)
@@ -72,7 +77,7 @@ class GaussianPolicy(hk.Module):
 
 class Constant(hk.Module):
     def __call__(self, start_value, dtype=jnp.float32):
-        value = hk.get_parameter("value", (1,), hk.initializers.ones)
+        value = hk.get_parameter("value", (1,), init=jnp.ones)
         return start_value * jnp.asarray(value, dtype)
 
 
