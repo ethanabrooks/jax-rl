@@ -108,7 +108,7 @@ class Trainer:
             save_freq=save_freq,
             discount=discount,
             lr=learning_rate,
-            policy_freq=policy_freq,
+            actor_freq=policy_freq,
             tau=tau,
         )
         self.rng = PRNGSequence(self.seed)
@@ -117,17 +117,17 @@ class Trainer:
         max_action = self.env.max_action()
         time_step = self.env.reset()
         iterator = self.generator(time_step)
-        state, params = next(iterator)
+        obs, params = next(iterator)
         for t in itertools.count():
             if t % self.eval_freq == 0:
                 self.eval_policy(params)
 
-            if t < 0:  # TODO: self.start_time_steps:
+            if t < self.start_time_steps:
                 action = self.env.action_space.sample()
             else:
-                action = self.policy.step(params, state, next(self.rng))
+                action = self.policy.step(params, obs, next(self.rng))
                 action = action.clip(-max_action, max_action)
-            state, params = iterator.send(action)
+            obs, params = iterator.send(action)
 
     def report(self, **kwargs):
         if self.use_tune:
@@ -144,21 +144,19 @@ class Trainer:
         action_dim = self.env.action_spec().shape[0]
         replay_buffer = ReplayBuffer(state_shape, action_dim, max_size=self.buffer_size)
         next(self.rng)
-        iterator = self.policy.generator(
+        params, opt_params = self.policy.init(
             self.env.observation_space.sample(), self.env.action_space.sample()
         )
-
-        params = next(iterator)
         for t in (
             range(int(self.max_time_steps))
             if self.max_time_steps
             else itertools.count()
         ):
             episode_time_steps += 1
-            state = time_step.observation
+            obs = time_step.observation
 
             # Select action randomly or according to policy
-            action = yield state, params.actor
+            action = yield obs, params["actor"]
 
             # Perform action
             time_step = self.env.step(action)
@@ -166,16 +164,22 @@ class Trainer:
 
             # Store data in replay buffer
             replay_buffer.add(
-                state, action, time_step.observation, time_step.reward, done_bool
+                obs, action, time_step.observation, time_step.reward, done_bool
             )
 
             episode_reward += time_step.reward
 
             # Train agent after collecting sufficient data
-            if t >= 0:  # TODO: self.start_time_steps:
-                for _ in range(self.train_steps):
+            if t >= self.start_time_steps:
+                for i in range(self.train_steps):
                     data = replay_buffer.sample(next(self.rng), self.batch_size)
-                    params = iterator.send(data)
+                    params, opt_params = self.policy.update_critic(
+                        params=params, opt_params=opt_params, **vars(data),
+                    )
+                    if (t * self.train_steps + i) % self.policy.actor_freq == 0:
+                        params, opt_params = self.policy.update_actor(
+                            params=params, opt_params=opt_params, **vars(data),
+                        )
 
             if time_step.last():
                 # +1 to account for 0 indexing. +0 on ep_time_steps since it will increment +1 even if done=True
