@@ -92,8 +92,7 @@ class GaussianPolicy(nn.Module):
         if not sample:
             return max_action * nn.tanh(mu), log_sig
         else:
-            sig = jnp.exp(log_sig)
-            pi = mu + random.normal(key, mu.shape) * sig
+            pi = mu + random.normal(key, mu.shape) * jnp.exp(log_sig)
             log_pi = gaussian_likelihood(pi, mu, log_sig)
             pi = nn.tanh(pi)
             log_pi -= jnp.sum(jnp.log(nn.relu(1 - pi ** 2) + 1e-6), axis=1)

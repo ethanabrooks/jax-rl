@@ -135,7 +135,7 @@ class Trainer:
         if self.use_tune:
             tune.report(**kwargs)
         else:
-            pprint(**kwargs)
+            pprint(kwargs)
 
     def generator(self):
         time_step = self.env.reset()
