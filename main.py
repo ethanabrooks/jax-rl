@@ -75,6 +75,9 @@ class Trainer:
                 while not eval_time_step.last():
                     if render:
                         eval_env.render()
+                    import ipdb
+
+                    ipdb.set_trace()
                     action = policy.select_action(eval_time_step.observation)
                     eval_time_step = eval_env.step(action)
                     avg_reward += eval_time_step.reward

@@ -1,18 +1,22 @@
 import itertools
 from dataclasses import dataclass
 from functools import partial
-from typing import Union
-
+from typing import Union, Callable
+import jax.experimental.optix as optix
 import jax
 import jax.numpy as jnp
 from flax import optim
 from haiku import PRNGSequence
 from jax import random
+import haiku as hk
 
 from models import (
     build_gaussian_policy_model,
     build_double_critic_model,
     build_constant_model,
+    DoubleCritic,
+    GaussianPolicy,
+    Constant,
 )
 from saving import save_model, load_model
 from utils import double_mse, apply_model, copy_params
@@ -20,7 +24,7 @@ from utils import double_mse, apply_model, copy_params
 
 @dataclass
 class Optimizers:
-    T = Union[optim.Adam, optim.Optimizer]
+    T = optix.GradientTransformation
     actor: T
     critic: T
     log_alpha: T
@@ -48,7 +52,7 @@ def get_td_target(
     critic_target,
     log_alpha,
 ):
-    next_action, next_log_p = actor(next_state, sample=True, key=rng)
+    next_action, next_log_p = actor.apply(next_state, sample=True, key=rng)
 
     target_Q1, target_Q2 = critic_target(next_state, next_action)
     target_Q = jnp.minimum(target_Q1, target_Q2) - jnp.exp(log_alpha()) * next_log_p
@@ -117,8 +121,11 @@ class SAC:
 
         actor_input_dim = [((1, *state_shape), jnp.float32)]
 
-        self.actor = build_gaussian_policy_model(
-            actor_input_dim, action_dim, max_action, next(self.rng)
+        # self.actor = build_gaussian_policy_model(
+        #     actor_input_dim, action_dim, max_action, next(self.rng)
+        # )
+        self.actor = hk.transform(
+            lambda x: GaussianPolicy(action_dim=action_dim, max_action=max_action,)(x)
         )
 
         init_rng = next(self.rng)
@@ -127,15 +134,17 @@ class SAC:
             ((1, *state_shape), jnp.float32),
             ((1, action_dim), jnp.float32),
         ]
-        self.critic = build_double_critic_model(self.critic_input_dim, init_rng)
+        # self.critic = build_double_critic_model(self.critic_input_dim, init_rng)
+        self.critic = hk.transform(lambda x: DoubleCritic()(x))
         self.entropy_tune = entropy_tune
-        self.log_alpha = build_constant_model(-3.5, next(self.rng))
+        # self.log_alpha = build_constant_model(-3.5, next(self.rng))
+        self.log_alpha = hk.transform(lambda x: Constant()(x))
         self.target_entropy = -action_dim
 
         self.adam = Optimizers(
-            actor=optim.Adam(learning_rate=lr),
-            critic=optim.Adam(learning_rate=lr),
-            log_alpha=optim.Adam(learning_rate=lr),
+            actor=optix.adam(learning_rate=lr),
+            critic=optix.adam(learning_rate=lr),
+            log_alpha=optix.adam(learning_rate=lr),
         )
         self.optimizer = None
 
@@ -150,12 +159,12 @@ class SAC:
         next(self.iterator)
 
     def generator(self, load_path=None):
-        critic_target = build_double_critic_model(self.critic_input_dim, next(self.rng))
-        self.optimizer = Optimizers(
-            actor=(self.adam.actor.create(self.actor)),
-            critic=(self.adam.critic.create(self.critic)),
-            log_alpha=(self.adam.log_alpha.create(self.log_alpha)),
-        )
+        # critic_target = build_double_critic_model(self.critic_input_dim, next(self.rng))
+        critic_target = hk.transform(lambda x: DoubleCritic()(x))
+        import ipdb
+
+        ipdb.set_trace()
+
         if load_path:
             self.optimizer = Optimizers(
                 actor=load_model(load_path + "_actor", self.optimizer.actor),
@@ -168,9 +177,9 @@ class SAC:
                 params=self.optimizer.critic.target.params
             )
 
-        self.optimizer.actor = jax.device_put(self.optimizer.actor)
-        self.optimizer.critic = jax.device_put(self.optimizer.critic)
-        self.optimizer.log_alpha = jax.device_put(self.optimizer.log_alpha)
+        # self.optimizer.actor = jax.device_put(self.optimizer.actor)
+        # self.optimizer.critic = jax.device_put(self.optimizer.critic)
+        # self.optimizer.log_alpha = jax.device_put(self.optimizer.log_alpha)
 
         for i in itertools.count():
 
@@ -182,9 +191,9 @@ class SAC:
                     *training_data,
                     discount=self.discount,
                     max_action=self.max_action,
-                    actor=self.optimizer.actor.target,
+                    actor=self.actor,
                     critic_target=critic_target,
-                    log_alpha=self.optimizer.log_alpha.target
+                    log_alpha=self.log_alpha,
                 )
             )
 
@@ -220,7 +229,7 @@ class SAC:
                 save_model(load_path + "_log_alpha", self.optimizer.log_alpha)
 
     def select_action(self, state):
-        mu, _ = apply_model(self.optimizer.actor.target, state)
+        mu, _ = apply_model(self.actor, state)
         return mu.flatten()
 
     def sample_action(self, rng, state):
