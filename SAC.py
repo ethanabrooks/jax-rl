@@ -361,7 +361,41 @@ class SAC:
             target_Q=target_Q,
         )
 
-    def update_actor(self, state):
+    @functools.partial(jax.jit, static_argnums=0)
+    def update_actor(self, params: dict, opt_params: dict, obs: jnp.ndarray):
+        params = Params(**params)
+        opt_params = OptParams(**opt_params)
+        grad, log_p = jax.grad(self.actor_loss, has_aux=True)(
+            params.actor,
+            critic=params.critic,
+            log_alpha=params.log_alpha,
+            obs=obs,
+            key=next(self.rng),
+        )
+        params.actor, opt_params.actor = self.apply_updates(
+            grad=grad,
+            optimizer=self.optimizer.critic,
+            _params=params.actor,
+            _opt_params=opt_params.actor,
+        )
+
+        if self.entropy_tune:
+            params.log_alpha, opt_params.log_alpha = self.apply_updates(
+                grad=jax.grad(self.alpha_loss)(params.log_alpha, log_p=log_p),
+                optimizer=self.optimizer.log_alpha,
+                _params=params.log_alpha,
+                _opt_params=opt_params.log_alpha,
+            )
+
+        params.target_critic = jax.tree_multimap(
+            lambda p1, p2: self.tau * p1 + (1 - self.tau) * p2,
+            params.target_critic,
+            params.critic,
+        )
+
+        return vars(params), vars(opt_params)
+
+    def update_actor_flax(self, state):
         self.flax_optimizer.actor, log_p = actor_step(
             rng=next(self.rng),
             optimizer=self.flax_optimizer.actor,
