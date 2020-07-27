@@ -39,7 +39,7 @@ class TD3Critic(nn.Module):
         return q1, q2
 
 
-class DoubleCritic(nn.Module):
+class NNDoubleCritic(nn.Module):
     def apply(self, state, action, Q1=False):
         state_action = jnp.concatenate([state, action], axis=1)
 
@@ -63,7 +63,7 @@ class DoubleCritic(nn.Module):
         return q1, q2
 
 
-class GaussianPolicy(nn.Module):
+class NNGaussianPolicy(nn.Module):
     def apply(
         self,
         x,
@@ -99,14 +99,14 @@ class GaussianPolicy(nn.Module):
             return max_action * pi, log_pi
 
 
-class Constant(nn.Module):
+class NNConstant(nn.Module):
     def apply(self, start_value, dtype=jnp.float32):
         value = self.param("value", (1,), nn.initializers.ones)
         return start_value * jnp.asarray(value, dtype)
 
 
 def build_constant_model(start_value, init_rng):
-    constant = Constant.partial(start_value=start_value)
+    constant = NNConstant.partial(start_value=start_value)
     _, init_params = constant.init(init_rng)
 
     return nn.Model(constant, init_params)
@@ -127,14 +127,14 @@ def build_td3_critic_model(input_shapes, init_rng):
 
 
 def build_double_critic_model(input_shapes, init_rng):
-    critic = DoubleCritic.partial()
+    critic = NNDoubleCritic.partial()
     _, init_params = critic.init_by_shape(init_rng, input_shapes)
 
     return nn.Model(critic, init_params)
 
 
 def build_gaussian_policy_model(input_shapes, action_dim, max_action, init_rng):
-    actor = GaussianPolicy.partial(action_dim=action_dim, max_action=max_action)
+    actor = NNGaussianPolicy.partial(action_dim=action_dim, max_action=max_action)
     _, init_params = actor.init_by_shape(init_rng, input_shapes)
 
     return nn.Model(actor, init_params)
