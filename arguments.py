@@ -21,17 +21,17 @@ def add_arguments(parser):
     parser.add_argument(
         "--load-model", default=None
     )  # Model load file name, "" doesn't load, "default" uses file_name
-    # parser.add_argument(
-    #     "--max-time-steps", default=1e6, type=int
-    # )  # Max time steps to run environment
+    parser.add_argument(
+        "--max-time-steps", default=1e6, type=int
+    )  # Max time steps to run environment
     # parser.add_argument(
     #     "--noise-clip", default=0.5
     # )  # Range to clip target policy noise
     # parser.add_argument("--num-action-samples", default=20, type=int)
     # parser.add_argument("--policy", default="SAC")  # Policy name (TD3, SAC, or MPO)
-    # parser.add_argument(
-    #     "--actor-freq", default=2, type=int
-    # )  # Frequency of delayed policy updates
+    parser.add_argument(
+        "--actor-freq", default=2, type=int
+    )  # Frequency of delayed policy updates
     # parser.add_argument(
     #     "--policy-noise", default=0.2
     # )  # Noise added to target policy during critic update
