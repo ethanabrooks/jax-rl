@@ -228,6 +228,36 @@ class SAC:
         self.iterator = self.generator()
         next(self.iterator)
 
+    def init(self, obs, action):
+        key = next(self.rng)
+        critic_params = self.net.critic.init(key, obs, action)
+        params = Params(
+            actor=self.net.actor.init(key, obs, key=None),
+            critic=critic_params,
+            target_critic=critic_params,
+            log_alpha=self.net.log_alpha.init(key),
+        )
+        opt_params = OptParams(
+            actor=self.optimizer.actor.init(params.actor),
+            critic=self.optimizer.critic.init(params.critic),
+            log_alpha=self.optimizer.log_alpha.init(params.log_alpha),
+        )
+        return vars(params), vars(opt_params)
+
+    def get_td_target(
+        self,
+        rng: PRNGKey,
+        params: Params,
+        next_obs: jnp.ndarray,
+        reward: jnp.ndarray,
+        not_done: jnp.ndarray,
+    ):
+        next_action, next_log_p = self.net.actor.apply(params.actor, next_obs, rng)
+
+        target_Q1, target_Q2 = self.net.target_critic.apply(
+            params.critic, next_obs, next_action
+        )
+
     def generator(self, load_path=None):
         critic_target = build_double_critic_model(self.critic_input_dim, next(self.rng))
         self.optimizer = Optimizers(
