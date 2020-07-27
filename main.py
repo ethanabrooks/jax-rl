@@ -13,7 +13,6 @@ from tqdm import tqdm
 
 import SAC
 import configs
-from arguments import add_arguments
 from envs import Environment
 from levels_env import Env
 from utils import ReplayBuffer
@@ -53,11 +52,11 @@ class Trainer:
         policy = "SAC"
         self.use_tune = use_tune
         self.seed = seed
-        self.max_time_steps = int(max_time_steps) if max_time_steps else None
-        self.start_time_steps = int(start_time_steps)
-        self.train_steps = int(train_steps)
-        self.batch_size = int(batch_size)
-        self.buffer_size = int(buffer_size)
+        self.max_time_steps = max_time_steps
+        self.start_time_steps = start_time_steps
+        self.train_steps = train_steps
+        self.batch_size = batch_size
+        self.buffer_size = buffer_size
         self.eval_freq = eval_freq
 
         def make_env():
@@ -115,10 +114,9 @@ class Trainer:
         self.rng = PRNGSequence(self.seed)
 
     def train(self):
+        iterator = self.generator()
         max_action = self.env.max_action()
-        time_step = self.env.reset()
-        iterator = self.generator(time_step)
-        obs = next(iterator)
+        state = next(iterator)
         for t in itertools.count():
             if t % self.eval_freq == 0:
                 self.eval_policy()
@@ -126,9 +124,12 @@ class Trainer:
             if t < self.start_time_steps:
                 action = self.env.action_space.sample()
             else:
-                action = self.policy.sample_action(next(self.rng), obs).squeeze(0)
-                action = action.clip(-max_action, max_action)
-            obs = iterator.send(action)
+                action = (
+                    (self.policy.sample_action(next(self.rng), state))
+                    .clip(-max_action, max_action)
+                    .squeeze(0)
+                )
+            state = iterator.send(action)
 
     def report(self, **kwargs):
         if self.use_tune:
@@ -136,29 +137,27 @@ class Trainer:
         else:
             pprint(kwargs)
 
-    def generator(self, time_step):
+    def generator(self):
+        time_step = self.env.reset()
         episode_reward = 0
         episode_time_steps = 0
         episode_num = 0
 
         state_shape = self.env.observation_spec().shape
         action_dim = self.env.action_spec().shape[0]
-
         replay_buffer = ReplayBuffer(state_shape, action_dim, max_size=self.buffer_size)
         next(self.rng)
-        self.policy.init(
-            self.env.observation_space.sample(), self.env.action_space.sample()
-        )
+
         for t in (
             range(int(self.max_time_steps))
             if self.max_time_steps
             else itertools.count()
         ):
             episode_time_steps += 1
-            obs = time_step.observation
+            state = time_step.observation
 
             # Select action randomly or according to policy
-            action = yield obs
+            action = yield state
 
             # Perform action
             time_step = self.env.step(action)
@@ -166,18 +165,15 @@ class Trainer:
 
             # Store data in replay buffer
             replay_buffer.add(
-                obs, action, time_step.observation, time_step.reward, done_bool
+                state, action, time_step.observation, time_step.reward, done_bool
             )
 
             episode_reward += time_step.reward
 
             # Train agent after collecting sufficient data
             if t >= self.start_time_steps:
-                for i in range(self.train_steps):
-                    data = replay_buffer.sample(next(self.rng), self.batch_size)
-                    self.policy.update_critic(**vars(data),)
-                    if (t * self.train_steps + i) % self.policy.actor_freq == 0:
-                        self.policy.update_actor(data.obs)
+                for _ in range(self.train_steps):
+                    self.policy.train(replay_buffer, self.batch_size)
 
             if time_step.last():
                 # +1 to account for 0 indexing. +0 on ep_time_steps since it will increment +1 even if done=True
@@ -194,11 +190,9 @@ class Trainer:
                 episode_num += 1
 
 
-def main(config, use_tune, num_samples, local_mode, env, **kwargs):
+def main(config, use_tune, num_samples, local_mode, env, load_path):
     config = getattr(configs, config)
-    config.update(env_id=env)
-    if local_mode or not use_tune:
-        config.update(**{k: v for k, v in kwargs.items() if v is not None})
+    config.update(env_id=env, load_path=load_path)
     if use_tune:
         ray.init(webui_host="127.0.0.1", local_mode=local_mode)
         metric = "reward"
@@ -223,5 +217,6 @@ if __name__ == "__main__":
     PARSER.add_argument("--no-tune", dest="use_tune", action="store_false")
     PARSER.add_argument("--local-mode", action="store_true")
     PARSER.add_argument("--num-samples", type=int)
-    add_arguments(PARSER)
+    PARSER.add_argument("--env")
+    PARSER.add_argument("--load-path")
     main(**vars(PARSER.parse_args()))
