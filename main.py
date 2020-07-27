@@ -76,7 +76,7 @@ class Trainer:
                 while not eval_time_step.last():
                     if render:
                         eval_env.render()
-                    action = policy.step(params, eval_time_step.observation)
+                    action = policy.select_action(eval_time_step.observation)
                     eval_time_step = eval_env.step(action)
                     avg_reward += eval_time_step.reward
 
@@ -126,7 +126,7 @@ class Trainer:
             if t < self.start_time_steps:
                 action = self.env.action_space.sample()
             else:
-                action = self.policy.step(params, obs, next(self.rng))
+                action = self.policy.sample_action(next(self.rng), obs).squeeze(0)
                 action = action.clip(-max_action, max_action)
             obs, params = iterator.send(action)
 
@@ -175,13 +175,13 @@ class Trainer:
             if t >= self.start_time_steps:
                 for i in range(self.train_steps):
                     data = replay_buffer.sample(next(self.rng), self.batch_size)
-                    params, opt_params = self.policy.update_critic(
-                        params=params, opt_params=opt_params, **vars(data),
+                    self.policy.update_critic(
+                        params=params, opt_params=opt_params, **vars(data)
                     )
                     self.policy.update_critic_flax(**vars(data),)
                     if (t * self.train_steps + i) % self.policy.actor_freq == 0:
                         self.policy.update_actor_flax(data.obs)
-                        params, opt_params = self.policy.update_actor(
+                        self.policy.update_actor(
                             params=params, opt_params=opt_params, obs=data.obs
                         )
 
