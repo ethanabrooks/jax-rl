@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Iterator, Union
 import jax
 import jax.numpy as jnp
