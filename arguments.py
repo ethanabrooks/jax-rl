@@ -35,14 +35,14 @@ def add_arguments(parser):
     # parser.add_argument(
     #     "--policy-noise", default=0.2
     # )  # Noise added to target policy during critic update
-    parser.add_argument(
-        "--render", action="store_true"
-    )  # Save model and optimizer parameters
-    parser.add_argument("--save-freq", default=5e3, type=int)
-    parser.add_argument(
-        "--save-model", action="store_true"
-    )  # Save model and optimizer parameters
-    parser.add_argument("--seed", default=0, type=int)  # Sets DM control and JAX seeds
+    # parser.add_argument(
+    #     "--render", action="store_true"
+    # )  # Save model and optimizer parameters
+    # parser.add_argument("--save-freq", default=5e3, type=int)
+    # parser.add_argument(
+    #     "--save-model", action="store_true"
+    # )  # Save model and optimizer parameters
+    # parser.add_argument("--seed", default=0, type=int)  # Sets DM control and JAX seeds
     # parser.add_argument(
     #     "--start-time-steps", default=1e4, type=int
     # )  # Time steps initial random policy is used
