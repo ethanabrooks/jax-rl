@@ -14,7 +14,7 @@ def big_values(start, stop):
 search = dict(
     learning_rate=hp.choice("learning_rate", small_values(2, 5)),
     batch_size=hp.choice("batch_size", big_values(6, 10)),
-    policy_freq=hp.choice("actor_freq", [1, 2, 3]),
+    actor_freq=hp.choice("actor_freq", [1, 2, 3]),
     tau=hp.choice("tau", small_values(2, 5)),
     seed=hp.randint("seed", 20),
 )
