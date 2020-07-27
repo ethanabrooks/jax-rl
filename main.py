@@ -139,6 +139,7 @@ class Trainer:
 
     def generator(self):
         time_step = self.env.reset()
+        self.policy._init()
         episode_reward = 0
         episode_time_steps = 0
         episode_num = 0
