@@ -30,24 +30,24 @@ def train(kwargs, use_tune):
 class Trainer:
     def __init__(
         self,
-        batch_size=256,
-        buffer_size=int(2e6),
-        discount=0.99,
-        env_id=None,
-        eval_freq=5e3,
-        eval_episodes=10,
-        learning_rate=3e-4,
-        load_path=None,
-        max_time_steps=None,
-        policy_freq=2,
-        save_freq=int(5e3),
-        save_model=True,
-        seed=0,
-        start_time_steps=int(1e4),
-        tau=0.005,
-        train_steps=1,
-        render=False,
-        use_tune=True,
+        batch_size,
+        buffer_size,
+        discount,
+        env_id,
+        eval_freq,
+        eval_episodes,
+        learning_rate,
+        load_path,
+        max_time_steps,
+        actor_freq,
+        save_freq,
+        save_model,
+        seed,
+        start_time_steps,
+        tau,
+        train_steps,
+        render,
+        use_tune,
     ):
         seed = int(seed)
         policy = "SAC"
@@ -109,7 +109,7 @@ class Trainer:
             save_freq=save_freq,
             discount=discount,
             lr=learning_rate,
-            actor_freq=policy_freq,
+            actor_freq=actor_freq,
             tau=tau,
         )
         self.rng = PRNGSequence(self.seed)
@@ -202,12 +202,14 @@ def main(config, use_tune, num_samples, local_mode, env, **kwargs):
     config = getattr(configs, config)
     config.update(env_id=env)
     if local_mode or not use_tune:
-        config.update(**{k: v for k, v in kwargs.items() if v is not None})
+        for k, v in kwargs.items():
+            if k not in config:
+                config[k] = v
     if use_tune:
         ray.init(webui_host="127.0.0.1", local_mode=local_mode)
         metric = "reward"
         if local_mode:
-            tune.run(train, config=config)
+            tune.run(train, config=config, resources_per_trial={"gpu": 1, "cpu": 2})
         else:
             tune.run(
                 train,
