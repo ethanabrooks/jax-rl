@@ -203,10 +203,9 @@ class Trainer:
 def main(config, use_tune, num_samples, local_mode, env, **kwargs):
     config = getattr(configs, config)
     config.update(env_id=env)
-    if local_mode or not use_tune:
-        for k, v in kwargs.items():
-            if k not in config:
-                config[k] = v
+    for k, v in kwargs.items():
+        if k not in config:
+            config[k] = v
     if use_tune:
         ray.init(webui_host="127.0.0.1", local_mode=local_mode)
         metric = "reward"
