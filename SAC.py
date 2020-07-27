@@ -160,7 +160,7 @@ class SAC:
         save_freq,
         discount=0.99,
         tau=0.005,
-        policy_freq=2,
+        actor_freq=2,
         lr=3e-4,
         entropy_tune=True,
         seed=0,
@@ -195,7 +195,7 @@ class SAC:
         self.max_action = max_action
         self.discount = discount
         self.tau = tau
-        self.policy_freq = policy_freq
+        self.actor_freq = actor_freq
         self.save_freq = save_freq
 
         self.total_it = 0
@@ -248,7 +248,7 @@ class SAC:
                 target_Q=target_Q,
             )
 
-            if i % self.policy_freq == 0:
+            if i % self.actor_freq == 0:
                 self.optimizer.actor, log_p = actor_step(
                     rng=next(self.rng),
                     optimizer=self.optimizer.actor,

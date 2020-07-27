@@ -38,7 +38,7 @@ class Trainer:
         learning_rate=3e-4,
         load_path=None,
         max_time_steps=None,
-        policy_freq=2,
+        actor_freq=2,
         save_freq=int(5e3),
         save_model=True,
         seed=0,
@@ -108,7 +108,7 @@ class Trainer:
             save_freq=save_freq,
             discount=discount,
             lr=learning_rate,
-            policy_freq=policy_freq,
+            actor_freq=actor_freq,
             tau=tau,
         )
         self.rng = PRNGSequence(self.seed)
