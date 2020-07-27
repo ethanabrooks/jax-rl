@@ -146,7 +146,7 @@ class Trainer:
 
         replay_buffer = ReplayBuffer(state_shape, action_dim, max_size=self.buffer_size)
         next(self.rng)
-        self.policy.init(
+        params, opt_params = self.policy.init(
             self.env.observation_space.sample(), self.env.action_space.sample()
         )
         for t in (
