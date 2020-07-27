@@ -13,6 +13,7 @@ from tqdm import tqdm
 
 import SAC
 import configs
+from arguments import add_arguments
 from envs import Environment
 from levels_env import Env
 from utils import ReplayBuffer
@@ -52,11 +53,11 @@ class Trainer:
         policy = "SAC"
         self.use_tune = use_tune
         self.seed = seed
-        self.max_time_steps = max_time_steps
-        self.start_time_steps = start_time_steps
-        self.train_steps = train_steps
-        self.batch_size = batch_size
-        self.buffer_size = buffer_size
+        self.max_time_steps = int(max_time_steps) if max_time_steps else None
+        self.start_time_steps = int(start_time_steps)
+        self.train_steps = int(train_steps)
+        self.batch_size = int(batch_size)
+        self.buffer_size = int(buffer_size)
         self.eval_freq = eval_freq
 
         def make_env():
@@ -142,6 +143,7 @@ class Trainer:
 
         state_shape = self.env.observation_spec().shape
         action_dim = self.env.action_spec().shape[0]
+
         replay_buffer = ReplayBuffer(state_shape, action_dim, max_size=self.buffer_size)
         next(self.rng)
         params, opt_params = self.policy.init(
@@ -178,7 +180,7 @@ class Trainer:
                     )
                     if (t * self.train_steps + i) % self.policy.actor_freq == 0:
                         params, opt_params = self.policy.update_actor(
-                            params=params, opt_params=opt_params, **vars(data),
+                            params=params, opt_params=opt_params, obs=data.obs
                         )
 
             if time_step.last():
@@ -196,9 +198,11 @@ class Trainer:
                 episode_num += 1
 
 
-def main(config, use_tune, num_samples, local_mode, env, load_path):
+def main(config, use_tune, num_samples, local_mode, env, **kwargs):
     config = getattr(configs, config)
-    config.update(env_id=env, load_path=load_path)
+    config.update(env_id=env)
+    if local_mode or not use_tune:
+        config.update(**{k: v for k, v in kwargs.items() if v is not None})
     if use_tune:
         ray.init(webui_host="127.0.0.1", local_mode=local_mode)
         metric = "reward"
@@ -223,6 +227,5 @@ if __name__ == "__main__":
     PARSER.add_argument("--no-tune", dest="use_tune", action="store_false")
     PARSER.add_argument("--local-mode", action="store_true")
     PARSER.add_argument("--num-samples", type=int)
-    PARSER.add_argument("--env")
-    PARSER.add_argument("--load-path")
+    add_arguments(PARSER)
     main(**vars(PARSER.parse_args()))

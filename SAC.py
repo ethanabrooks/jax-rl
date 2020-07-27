@@ -1,27 +1,21 @@
 import functools
-import itertools
 from dataclasses import dataclass
 from functools import partial
-from typing import Union, Callable
-import jax.experimental.optix as optix
+
+import haiku as hk
 import jax
+import jax.experimental.optix as optix
 import jax.numpy as jnp
-from flax import optim
 from haiku import PRNGSequence
 from haiku._src.typing import PRNGKey
 from jax import random
-import haiku as hk
 
 from models import (
-    build_gaussian_policy_model,
-    build_double_critic_model,
-    build_constant_model,
     DoubleCritic,
     GaussianPolicy,
     Constant,
 )
-from saving import save_model, load_model
-from utils import double_mse, apply_model, copy_params
+from utils import double_mse
 
 
 @dataclass
@@ -66,47 +60,6 @@ def alpha_loss_fn(log_alpha, target_entropy, log_p):
     return (log_alpha * (-log_p - target_entropy)).mean()
 
 
-@jax.jit
-def critic_step(optimizer, state, action, target_Q):
-    def loss_fn(critic):
-        current_Q1, current_Q2 = critic(state, action)
-        critic_loss = double_mse(current_Q1, current_Q2, target_Q)
-        return jnp.mean(critic_loss)
-
-    grad = jax.grad(loss_fn)(optimizer.target)
-    return optimizer.apply_gradient(grad)
-
-
-@jax.jit
-def actor_step(rng, optimizer, critic, state, log_alpha):
-    critic, log_alpha = critic.target, log_alpha.target
-
-    def loss_fn(actor):
-        actor_action, log_p = actor(state, sample=True, key=rng)
-        q1, q2 = critic(state, actor_action)
-        min_q = jnp.minimum(q1, q2)
-        partial_loss_fn = jax.vmap(
-            partial(actor_loss_fn, jax.lax.stop_gradient(log_alpha()))
-        )
-        actor_loss = partial_loss_fn(log_p, min_q)
-        return jnp.mean(actor_loss), log_p
-
-    grad, log_p = jax.grad(loss_fn, has_aux=True)(optimizer.target)
-    return optimizer.apply_gradient(grad), log_p
-
-
-@jax.jit
-def alpha_step(optimizer, log_p, target_entropy):
-    log_p = jax.lax.stop_gradient(log_p)
-
-    def loss_fn(log_alpha):
-        partial_loss_fn = jax.vmap(partial(alpha_loss_fn, log_alpha(), target_entropy))
-        return jnp.mean(partial_loss_fn(log_p))
-
-    grad = jax.grad(loss_fn)(optimizer.target)
-    return optimizer.apply_gradient(grad)
-
-
 class SAC:
     def __init__(
         self,
@@ -125,11 +78,6 @@ class SAC:
 
         self.rng = PRNGSequence(seed)
 
-        # actor_input_dim = [((1, *state_shape), jnp.float32)]
-
-        # self.actor = build_gaussian_policy_model(
-        #     actor_input_dim, action_dim, max_action, next(self.rng)
-        # )
         def actor(obs, key=None):
             return GaussianPolicy(action_dim=action_dim, max_action=max_action)(
                 obs, key
@@ -150,13 +98,7 @@ class SAC:
             target_critic=transform(critic),
             log_alpha=transform(log_alpha),
         )
-        # self.critic_input_dim = [
-        #     ((1, *state_shape), jnp.float32),
-        #     ((1, action_dim), jnp.float32),
-        # ]
-        # self.critic = build_double_critic_model(self.critic_input_dim, init_rng)
         self.entropy_tune = entropy_tune
-        # self.log_alpha = build_constant_model(-3.5, next(self.rng))
         self.target_entropy = -action_dim
 
         self.optimizer = Optimizers(
@@ -189,7 +131,6 @@ class SAC:
         )
         return vars(params), vars(opt_params)
 
-    # @jax.jit
     def get_td_target(
         self,
         rng: PRNGKey,
@@ -227,7 +168,6 @@ class SAC:
         self,
         actor: jnp.ndarray,
         critic: jnp.ndarray,
-        target_critic: jnp.ndarray,
         log_alpha: jnp.ndarray,
         obs: jnp.ndarray,
         key: PRNGKey,
@@ -256,85 +196,52 @@ class SAC:
 
     @staticmethod
     def apply_updates(
-        *args,
-        loss,
-        _params,
-        _opt_params,
-        optimizer: optix.GradientTransformation,
-        has_aux=False
+        grad, _params, _opt_params, optimizer: optix.GradientTransformation,
     ):
-        grad = jax.grad(loss, has_aux=has_aux)(*args)
-        grad, aux = grad if has_aux else (grad, None)
         updates, _opt_params = optimizer.update(grad, _opt_params)
-        return (optix.apply_updates(_params, updates), _opt_params, aux)
+        return (optix.apply_updates(_params, updates), _opt_params)
 
     @functools.partial(jax.jit, static_argnums=0)
     def update_critic(self, params: dict, opt_params: dict, obs, action, **kwargs):
         params = Params(**params)
         opt_params = OptParams(**opt_params)
-        # critic_target = build_double_critic_model(self.critic_input_dim, next(self.rng))
-        # critic_target = hk.transform(lambda x: DoubleCritic()(x))
-
-        # state, action, next_state, reward, not_done = yield params
 
         target_Q = jax.lax.stop_gradient(
             self.get_td_target(rng=next(self.rng), params=params, **kwargs,)
         )
 
-        params.critic, opt_params.critic, _ = self.apply_updates(
-            params.critic,
-            obs,
-            action,
-            target_Q,
-            loss=self.critic_loss,
+        params.critic, opt_params.critic = self.apply_updates(
+            grad=jax.grad(self.critic_loss)(
+                params.critic, obs=obs, action=action, target_Q=target_Q
+            ),
             optimizer=self.optimizer.critic,
             _params=params.critic,
             _opt_params=opt_params.critic,
         )
 
-        # self.optimizer.critic = critic_step(
-        #     optimizer=self.optimizer.critic,
-        #     state=state,
-        #     action=action,
-        #     target_Q=target_Q,
-        # )
-
-        # if i % self.policy_freq == 0:
-        # self.optimizer.actor, log_p = actor_step(
-        #     rng=next(self.rng),
-        #     optimizer=self.optimizer.actor,
-        #     critic=self.optimizer.critic,
-        #     state=state,
-        #     log_alpha=self.optimizer.log_alpha,
-        # )
-
         return vars(params), vars(opt_params)
 
     @functools.partial(jax.jit, static_argnums=0)
-    def update_actor(self, params: dict, opt_params: dict, obs, action, **kwargs):
+    def update_actor(self, params: dict, opt_params: dict, obs: jnp.ndarray):
         params = Params(**params)
         opt_params = OptParams(**opt_params)
-        params.actor, opt_params.actor, log_p = self.apply_updates(
-            *vars(params).values(),
-            obs,
-            next(self.rng),
-            loss=self.actor_loss,
+        grad, log_p = jax.grad(self.actor_loss, has_aux=True)(
+            params.actor,
+            critic=params.critic,
+            log_alpha=params.log_alpha,
+            obs=obs,
+            key=next(self.rng),
+        )
+        params.actor, opt_params.actor = self.apply_updates(
+            grad=grad,
             optimizer=self.optimizer.critic,
             _params=params.actor,
             _opt_params=opt_params.actor,
-            has_aux=True,
         )
 
         if self.entropy_tune:
-            # self.optimizer.log_alpha = alpha_step(
-            #     optimizer=self.optimizer.log_alpha,
-            #     log_p=log_p,
-            #     target_entropy=self.target_entropy,
-            # )
-            params.log_alpha, opt_params.log_alpha, _ = self.apply_updates(
-                params.log_alpha,
-                log_p,
-                loss=self.alpha_loss,
+            params.log_alpha, opt_params.log_alpha = self.apply_updates(
+                grad=jax.grad(self.alpha_loss)(params.log_alpha, log_p=log_p),
                 optimizer=self.optimizer.log_alpha,
                 _params=params.log_alpha,
                 _opt_params=opt_params.log_alpha,
@@ -348,27 +255,9 @@ class SAC:
 
         return vars(params), vars(opt_params)
 
-    # if load_path and i % self.save_freq == 0:
-    #     save_model(load_path + "_critic", self.optimizer.critic)
-    #     save_model(load_path + "_actor", self.optimizer.actor)
-    #     save_model(load_path + "_log_alpha", self.optimizer.log_alpha)
-
-    # @functools.partial(jax.jit, static_argnums=0)
-    # def select_action(self, params, state):
-    #     mu, _ = self.actor.apply(params, state)
-    #     return mu.flatten()
-    #
     @functools.partial(jax.jit, static_argnums=0)
     def step(self, params, obs, rng=None):
         mu, log_sig = self.net.actor.apply(params, obs)
         if rng is not None:  # TODO: this is gross
             mu += random.normal(rng, mu.shape) * jnp.exp(log_sig)
         return mu
-
-    # def train(self, initial_state, replay_buffer, batch_size=100, load_path=None):
-    #     if self.iterator is None:
-    #         self.iterator = self.generator(initial_state, load_path=load_path)
-    #         next(self.iterator)
-    #
-    #     data = replay_buffer.sample(next(self.rng), batch_size)
-    #     return self.iterator.send(data)
