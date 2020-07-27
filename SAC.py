@@ -225,22 +225,21 @@ class SAC:
     @functools.partial(jax.jit, static_argnums=0)
     def flax_get_td_target(
         self,
+        actor,
+        critic_target,
+        log_alpha,
+        discount,
         rng: PRNGKey,
         params: Params,
         next_obs: jnp.ndarray,
         reward: jnp.ndarray,
         not_done: jnp.ndarray,
     ):
-        next_action, next_log_p = self.flax_optimizer.actor.target(
-            next_obs, sample=True, key=rng
-        )
+        next_action, next_log_p = actor(next_obs, sample=True, key=rng)
 
-        target_Q1, target_Q2 = self.critic_target(next_obs, next_action)
-        target_Q = (
-            jnp.minimum(target_Q1, target_Q2)
-            - jnp.exp(self.flax_optimizer.log_alpha.target()) * next_log_p
-        )
-        target_Q = reward + not_done * self.discount * target_Q
+        target_Q1, target_Q2 = critic_target(next_obs, next_action)
+        target_Q = jnp.minimum(target_Q1, target_Q2) - jnp.exp(log_alpha()) * next_log_p
+        target_Q = reward + not_done * discount * target_Q
 
         return target_Q
 
@@ -343,6 +342,10 @@ class SAC:
                 next_obs=next_obs,
                 reward=reward,
                 not_done=not_done,
+                discount=self.discount,
+                actor=self.flax_optimizer.actor.target,
+                critic_target=critic_target,
+                log_alpha=self.flax_optimizer.log_alpha.target,
                 params=params,
             )
         )
