@@ -29,7 +29,7 @@ from haiku import PRNGSequence
 from haiku._src.typing import PRNGKey
 from jax import random
 
-from flax_models import (
+from models import (
     DoubleCritic,
     GaussianPolicy,
     Constant,
