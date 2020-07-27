@@ -71,14 +71,6 @@ class OptParams:
     log_alpha: T
 
 
-@dataclass
-class Optimizers:
-    T = Union[optim.Adam, optim.Optimizer]
-    actor: T
-    critic: T
-    log_alpha: T
-
-
 def actor_loss_fn(log_alpha, log_p, min_q):
     return (jnp.exp(log_alpha) * log_p - min_q).mean()
 
@@ -307,6 +299,33 @@ class SAC:
         )
         return jnp.mean(partial_loss_fn(log_p))
 
+    @staticmethod
+    def apply_updates(
+        grad, _params, _opt_params, optimizer: optix.GradientTransformation,
+    ):
+        updates, _opt_params = optimizer.update(grad, _opt_params)
+        return (optix.apply_updates(_params, updates), _opt_params)
+
+    @functools.partial(jax.jit, static_argnums=0)
+    def update_critic(self, params: dict, opt_params: dict, obs, action, **kwargs):
+        params = Params(**params)
+        opt_params = OptParams(**opt_params)
+
+        target_Q = jax.lax.stop_gradient(
+            self.get_td_target(rng=next(self.rng), params=params, **kwargs,)
+        )
+
+        params.critic, opt_params.critic = self.apply_updates(
+            grad=jax.grad(self.critic_loss)(
+                params.critic, obs=obs, action=action, target_Q=target_Q
+            ),
+            optimizer=self.optimizer.critic,
+            _params=params.critic,
+            _opt_params=opt_params.critic,
+        )
+
+        return vars(params), vars(opt_params)
+
     def generator(self, load_path=None):
         critic_target = build_double_critic_model(self.critic_input_dim, next(self.rng))
         self.optimizer = Optimizers(
@@ -330,7 +349,7 @@ class SAC:
                     max_action=self.max_action,
                     actor=self.optimizer.actor.target,
                     critic_target=critic_target,
-                    log_alpha=self.optimizer.log_alpha.target
+                    log_alpha=self.optimizer.log_alpha.target,
                 )
             )
 
