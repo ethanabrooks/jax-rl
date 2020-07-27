@@ -430,3 +430,10 @@ class SAC:
 
         data = replay_buffer.sample(next(self.rng), batch_size)
         return self.iterator.send(data)
+
+    @functools.partial(jax.jit, static_argnums=0)
+    def step(self, params, obs, rng=None):
+        mu, log_sig = self.net.actor.apply(params, obs)
+        if rng is not None:  # TODO: this is gross
+            mu += random.normal(rng, mu.shape) * jnp.exp(log_sig)
+        return mu
