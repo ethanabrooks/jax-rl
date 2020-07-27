@@ -7,22 +7,31 @@ from jax import random
 import numpy as onp
 
 
+@dataclass
+class BufferOutput:
+    obs: jnp.ndarray
+    action: jnp.ndarray
+    next_obs: jnp.ndarray
+    reward: jnp.ndarray
+    not_done: jnp.ndarray
+
+
 class ReplayBuffer(object):
     def __init__(self, state_shape, action_dim, max_size=int(2e6)):
         self.max_size = max_size
         self.ptr = 0
         self.size = 0
 
-        self.state = onp.zeros((max_size, *state_shape))
+        self.obs = onp.zeros((max_size, *state_shape))
         self.action = onp.zeros((max_size, action_dim))
-        self.next_state = onp.zeros((max_size, *state_shape))
+        self.next_obs = onp.zeros((max_size, *state_shape))
         self.reward = onp.zeros((max_size, 1))
         self.not_done = onp.zeros((max_size, 1))
 
-    def add(self, state, action, next_state, reward, done):
-        self.state[self.ptr] = state
+    def add(self, obs, action, next_obs, reward, done):
+        self.obs[self.ptr] = obs
         self.action[self.ptr] = action
-        self.next_state[self.ptr] = next_state
+        self.next_obs[self.ptr] = next_obs
         self.reward[self.ptr] = reward
         self.not_done[self.ptr] = 1.0 - done
 
@@ -32,12 +41,12 @@ class ReplayBuffer(object):
     def sample(self, rng, batch_size):
         ind = random.randint(rng, (batch_size,), 0, self.size)
 
-        return (
-            jax.device_put(self.state[ind]),
-            jax.device_put(self.action[ind]),
-            jax.device_put(self.next_state[ind]),
-            jax.device_put(self.reward[ind]),
-            jax.device_put(self.not_done[ind]),
+        return BufferOutput(
+            obs=jax.device_put(self.obs[ind]),
+            action=jax.device_put(self.action[ind]),
+            next_obs=jax.device_put(self.next_obs[ind]),
+            reward=jax.device_put(self.reward[ind]),
+            not_done=jax.device_put(self.not_done[ind]),
         )
 
 
