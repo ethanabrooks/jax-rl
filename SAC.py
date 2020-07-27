@@ -9,7 +9,7 @@ from flax import optim
 from haiku import PRNGSequence
 from jax import random
 
-from models import (
+from flax_models import (
     build_gaussian_policy_model,
     build_double_critic_model,
     build_constant_model,
@@ -29,7 +29,7 @@ from haiku import PRNGSequence
 from haiku._src.typing import PRNGKey
 from jax import random
 
-from models import (
+from flax_models import (
     DoubleCritic,
     GaussianPolicy,
     Constant,

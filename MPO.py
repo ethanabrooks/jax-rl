@@ -9,7 +9,7 @@ from haiku import PRNGSequence
 
 from saving import save_model, load_model
 from utils import apply_model, double_mse, gaussian_likelihood, kl_mvg_diag
-from models import (
+from flax_models import (
     build_gaussian_policy_model,
     build_double_critic_model,
     build_constant_model,

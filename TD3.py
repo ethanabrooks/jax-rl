@@ -4,7 +4,7 @@ from jax import random
 import jax.numpy as jnp
 from haiku import PRNGSequence
 
-from models import build_td3_actor_model, build_td3_critic_model
+from flax_models import build_td3_actor_model, build_td3_critic_model
 from utils import double_mse, apply_model, copy_params
 from saving import save_model, load_model
 
