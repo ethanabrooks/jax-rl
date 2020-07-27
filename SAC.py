@@ -257,12 +257,55 @@ class SAC:
         target_Q1, target_Q2 = self.net.target_critic.apply(
             params.critic, next_obs, next_action
         )
-
         target_Q = (
             jnp.minimum(target_Q1, target_Q2)
             - jnp.exp(self.net.log_alpha.apply(params.log_alpha)) * next_log_p
         )
+        target_Q = reward + not_done * self.discount * target_Q
+
         return target_Q
+
+    # noinspection PyPep8Naming
+    def critic_loss(
+        self,
+        params: jnp.ndarray,
+        obs: jnp.ndarray,
+        action: jnp.ndarray,
+        target_Q: jnp.ndarray,
+    ):
+        current_Q1, current_Q2 = self.net.critic.apply(params, obs, action)
+        critic_loss = double_mse(current_Q1, current_Q2, target_Q)
+        return jnp.mean(critic_loss)
+
+    def actor_loss(
+        self,
+        actor: jnp.ndarray,
+        critic: jnp.ndarray,
+        log_alpha: jnp.ndarray,
+        obs: jnp.ndarray,
+        key: PRNGKey,
+    ):
+        actor_action, log_p = self.net.actor.apply(actor, obs, key=key)
+        q1, q2 = self.net.critic.apply(critic, obs, actor_action)
+        min_q = jnp.minimum(q1, q2)
+        partial_loss_fn = jax.vmap(
+            partial(
+                actor_loss_fn,
+                jax.lax.stop_gradient(self.net.log_alpha.apply(log_alpha)),
+            )
+        )
+        actor_loss = partial_loss_fn(log_p, min_q)
+        return jnp.mean(actor_loss), log_p
+
+    def alpha_loss(
+        self, params: jnp.ndarray, log_p: jnp.ndarray,
+    ):
+        partial_loss_fn = jax.vmap(
+            partial(
+                alpha_loss_fn, self.net.log_alpha.apply(params), self.target_entropy
+            )
+        )
+        return jnp.mean(partial_loss_fn(log_p))
 
     def generator(self, load_path=None):
         critic_target = build_double_critic_model(self.critic_input_dim, next(self.rng))
@@ -271,7 +314,6 @@ class SAC:
             critic=(self.adam.critic.create(self.critic)),
             log_alpha=(self.adam.log_alpha.create(self.log_alpha)),
         )
-
         self.optimizer.actor = jax.device_put(self.optimizer.actor)
         self.optimizer.critic = jax.device_put(self.optimizer.critic)
         self.optimizer.log_alpha = jax.device_put(self.optimizer.log_alpha)
