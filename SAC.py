@@ -220,20 +220,32 @@ class SAC:
         self.i = 0
 
     def init(self, obs, action):
-        key = next(self.rng)
-        critic_params = self.net.critic.init(key, obs, action)
-        params = Params(
-            actor=self.net.actor.init(key, obs, key=None),
-            critic=critic_params,
-            target_critic=critic_params,
-            log_alpha=self.net.log_alpha.init(key),
+        # key = next(self.rng)
+        # critic_params = self.net.critic.init(key, obs, action)
+        # params = Params(
+        #     actor=self.net.actor.init(key, obs, key=None),
+        #     critic=critic_params,
+        #     target_critic=critic_params,
+        #     log_alpha=self.net.log_alpha.init(key),
+        # )
+        # opt_params = OptParams(
+        #     actor=self.optimizer.actor.init(params.actor),
+        #     critic=self.optimizer.critic.init(params.critic),
+        #     log_alpha=self.optimizer.log_alpha.init(params.log_alpha),
+        # )
+        # return vars(params), vars(opt_params)
+
+        self.critic_target = build_double_critic_model(
+            self.critic_input_dim, next(self.rng)
         )
-        opt_params = OptParams(
-            actor=self.optimizer.actor.init(params.actor),
-            critic=self.optimizer.critic.init(params.critic),
-            log_alpha=self.optimizer.log_alpha.init(params.log_alpha),
+        self.optimizer = Optimizers(
+            actor=(self.adam.actor.create(self.actor)),
+            critic=(self.adam.critic.create(self.critic)),
+            log_alpha=(self.adam.log_alpha.create(self.log_alpha)),
         )
-        return vars(params), vars(opt_params)
+        self.optimizer.actor = jax.device_put(self.optimizer.actor)
+        self.optimizer.critic = jax.device_put(self.optimizer.critic)
+        self.optimizer.log_alpha = jax.device_put(self.optimizer.log_alpha)
 
     def get_td_target(
         self,
@@ -324,19 +336,6 @@ class SAC:
         )
 
         return vars(params), vars(opt_params)
-
-    def _init(self, load_path=None):
-        self.critic_target = build_double_critic_model(
-            self.critic_input_dim, next(self.rng)
-        )
-        self.optimizer = Optimizers(
-            actor=(self.adam.actor.create(self.actor)),
-            critic=(self.adam.critic.create(self.critic)),
-            log_alpha=(self.adam.log_alpha.create(self.log_alpha)),
-        )
-        self.optimizer.actor = jax.device_put(self.optimizer.actor)
-        self.optimizer.critic = jax.device_put(self.optimizer.critic)
-        self.optimizer.log_alpha = jax.device_put(self.optimizer.log_alpha)
 
     def update(self, training_data):
         self.i += 1
