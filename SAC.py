@@ -30,9 +30,9 @@ from haiku._src.typing import PRNGKey
 from jax import random
 
 from models import (
-    NNDoubleCritic,
-    NNGaussianPolicy,
-    NNConstant,
+    DoubleCritic,
+    GaussianPolicy,
+    Constant,
 )
 from utils import double_mse
 
@@ -170,15 +170,15 @@ class SAC:
         init_rng = next(self.rng)
 
         def actor(obs, key=None):
-            return NNGaussianPolicy(action_dim=action_dim, max_action=max_action)(
+            return GaussianPolicy(action_dim=action_dim, max_action=max_action)(
                 obs, key
             )
 
         def critic(obs, action):
-            return NNDoubleCritic()(obs, action)
+            return DoubleCritic()(obs, action)
 
         def log_alpha(_=None):
-            return NNConstant()(initial_log_alpha)
+            return Constant()(initial_log_alpha)
 
         self.critic_input_dim = [
             ((1, *state_shape), jnp.float32),
@@ -219,19 +219,20 @@ class SAC:
         self.total_it = 0
 
     def init(self, obs, action):
-        key = next(self.rng)
-        critic_params = self.net.critic.init(key, obs, action)
-        params = Params(
-            actor=self.net.actor.init(key, obs, key=None),
-            critic=critic_params,
-            target_critic=critic_params,
-            log_alpha=self.net.log_alpha.init(key),
-        )
-        opt_params = OptParams(
-            actor=self.optimizer.actor.init(params.actor),
-            critic=self.optimizer.critic.init(params.critic),
-            log_alpha=self.optimizer.log_alpha.init(params.log_alpha),
-        )
+        # key = next(self.rng)
+        # critic_params = self.net.critic.init(key, obs, action)
+        # params = Params(
+        #     actor=self.net.actor.init(key, obs, key=None),
+        #     critic=critic_params,
+        #     target_critic=critic_params,
+        #     log_alpha=self.net.log_alpha.init(key),
+        # )
+        # opt_params = OptParams(
+        #     actor=self.optimizer.actor.init(params.actor),
+        #     critic=self.optimizer.critic.init(params.critic),
+        #     log_alpha=self.optimizer.log_alpha.init(params.log_alpha),
+        # )
+        # return vars(params), vars(opt_params)
         self.critic_target = build_double_critic_model(
             self.critic_input_dim, next(self.rng)
         )
@@ -243,7 +244,6 @@ class SAC:
         self.optimizer.actor = jax.device_put(self.optimizer.actor)
         self.optimizer.critic = jax.device_put(self.optimizer.critic)
         self.optimizer.log_alpha = jax.device_put(self.optimizer.log_alpha)
-        return vars(params), vars(opt_params)
 
     def get_td_target(
         self,
