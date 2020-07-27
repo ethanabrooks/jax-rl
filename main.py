@@ -182,7 +182,6 @@ class Trainer:
                     episode=episode_num + 1,
                     episode_time_steps=episode_time_steps,
                     reward=episode_reward,
-                    log_alpha=self.policy.log_alpha,
                 )
                 # Reset environment
                 time_step = self.env.reset()
