@@ -315,7 +315,7 @@ class SAC:
         updates, _opt_params = optimizer.update(grad, _opt_params)
         return (optix.apply_updates(_params, updates), _opt_params)
 
-    # @functools.partial(jax.jit, static_argnums=0)
+    @functools.partial(jax.jit, static_argnums=0)
     def update_critic(self, params: dict, opt_params: dict, obs, action, **kwargs):
         params = Params(**params)
         opt_params = OptParams(**opt_params)
