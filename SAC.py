@@ -17,6 +17,59 @@ from models import (
 from saving import save_model, load_model
 from utils import double_mse, apply_model, copy_params
 
+import functools
+from dataclasses import dataclass
+from functools import partial
+
+import haiku as hk
+import jax
+import jax.experimental.optix as optix
+import jax.numpy as jnp
+from haiku import PRNGSequence
+from haiku._src.typing import PRNGKey
+from jax import random
+
+from models import (
+    DoubleCritic,
+    GaussianPolicy,
+    Constant,
+)
+from utils import double_mse
+
+
+@dataclass
+class Nets:
+    T = hk.Transformed
+    actor: T
+    critic: T
+    target_critic: T
+    log_alpha: T
+
+
+@dataclass
+class Optimizers:
+    T = optix.GradientTransformation
+    actor: T
+    critic: T
+    log_alpha: T
+
+
+@dataclass
+class Params:
+    T = jnp.array
+    actor: T
+    critic: T
+    target_critic: T
+    log_alpha: T
+
+
+@dataclass
+class OptParams:
+    T = jnp.array
+    actor: T
+    critic: T
+    log_alpha: T
+
 
 @dataclass
 class Optimizers:
