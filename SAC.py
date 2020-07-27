@@ -258,6 +258,12 @@ class SAC:
             params.critic, next_obs, next_action
         )
 
+        target_Q = (
+            jnp.minimum(target_Q1, target_Q2)
+            - jnp.exp(self.net.log_alpha.apply(params.log_alpha)) * next_log_p
+        )
+        return target_Q
+
     def generator(self, load_path=None):
         critic_target = build_double_critic_model(self.critic_input_dim, next(self.rng))
         self.optimizer = Optimizers(
@@ -265,17 +271,6 @@ class SAC:
             critic=(self.adam.critic.create(self.critic)),
             log_alpha=(self.adam.log_alpha.create(self.log_alpha)),
         )
-        if load_path:
-            self.optimizer = Optimizers(
-                actor=load_model(load_path + "_actor", self.optimizer.actor),
-                critic=load_model(load_path + "_critic", self.optimizer.critic),
-                log_alpha=load_model(
-                    load_path + "_log_alpha", self.optimizer.log_alpha
-                ),
-            )
-            critic_target = critic_target.replace(
-                params=self.optimizer.critic.target.params
-            )
 
         self.optimizer.actor = jax.device_put(self.optimizer.actor)
         self.optimizer.critic = jax.device_put(self.optimizer.critic)
