@@ -235,14 +235,14 @@ class SAC:
         self.critic_target = build_double_critic_model(
             self.critic_input_dim, next(self.rng)
         )
-        self.optimizer = Optimizers(
+        self.flax_optimizer = Optimizers(
             actor=(self.adam.actor.create(self.actor)),
             critic=(self.adam.critic.create(self.critic)),
             log_alpha=(self.adam.log_alpha.create(self.log_alpha)),
         )
-        self.optimizer.actor = jax.device_put(self.optimizer.actor)
-        self.optimizer.critic = jax.device_put(self.optimizer.critic)
-        self.optimizer.log_alpha = jax.device_put(self.optimizer.log_alpha)
+        self.flax_optimizer.actor = jax.device_put(self.flax_optimizer.actor)
+        self.flax_optimizer.critic = jax.device_put(self.flax_optimizer.critic)
+        self.flax_optimizer.log_alpha = jax.device_put(self.flax_optimizer.log_alpha)
         return vars(params), vars(opt_params)
 
     def get_td_target(
@@ -316,26 +316,27 @@ class SAC:
         return (optix.apply_updates(_params, updates), _opt_params)
 
     # @functools.partial(jax.jit, static_argnums=0)
-    # def update_critic(self, params: dict, opt_params: dict, obs, action, **kwargs):
-    #     params = Params(**params)
-    #     opt_params = OptParams(**opt_params)
-    #
-    #     target_Q = jax.lax.stop_gradient(
-    #         self.get_td_target(rng=next(self.rng), params=params, **kwargs,)
-    #     )
-    #
-    #     params.critic, opt_params.critic = self.apply_updates(
-    #         grad=jax.grad(self.critic_loss)(
-    #             params.critic, obs=obs, action=action, target_Q=target_Q
-    #         ),
-    #         optimizer=self.optimizer.critic,
-    #         _params=params.critic,
-    #         _opt_params=opt_params.critic,
-    #     )
-    #
-    #     return vars(params), vars(opt_params)
+    def update_critic(self, params: dict, opt_params: dict, obs, action, **kwargs):
+        params = Params(**params)
+        opt_params = OptParams(**opt_params)
 
-    def update_critic(self, obs, action, next_obs, reward, not_done):
+        target_Q = jax.lax.stop_gradient(
+            self.get_td_target(rng=next(self.rng), params=params, **kwargs,)
+        )
+
+        grad = jax.grad(self.critic_loss)(
+            params.critic, obs=obs, action=action, target_Q=target_Q
+        )
+        params.critic, opt_params.critic = self.apply_updates(
+            grad=grad,
+            optimizer=self.optimizer.critic,
+            _params=params.critic,
+            _opt_params=opt_params.critic,
+        )
+
+        return vars(params), vars(opt_params)
+
+    def update_critic_flax(self, obs, action, next_obs, reward, not_done):
         critic_target = self.critic_target
         target_Q = jax.lax.stop_gradient(
             get_td_target(
@@ -347,45 +348,45 @@ class SAC:
                 not_done,
                 discount=self.discount,
                 max_action=self.max_action,
-                actor=self.optimizer.actor.target,
+                actor=self.flax_optimizer.actor.target,
                 critic_target=critic_target,
-                log_alpha=self.optimizer.log_alpha.target,
+                log_alpha=self.flax_optimizer.log_alpha.target,
             )
         )
 
-        self.optimizer.critic = critic_step(
-            optimizer=self.optimizer.critic,
+        self.flax_optimizer.critic = critic_step(
+            optimizer=self.flax_optimizer.critic,
             state=obs,
             action=action,
             target_Q=target_Q,
         )
 
     def update_actor(self, state):
-        self.optimizer.actor, log_p = actor_step(
+        self.flax_optimizer.actor, log_p = actor_step(
             rng=next(self.rng),
-            optimizer=self.optimizer.actor,
-            critic=self.optimizer.critic,
+            optimizer=self.flax_optimizer.actor,
+            critic=self.flax_optimizer.critic,
             state=state,
-            log_alpha=self.optimizer.log_alpha,
+            log_alpha=self.flax_optimizer.log_alpha,
         )
 
         if self.entropy_tune:
-            self.optimizer.log_alpha = alpha_step(
-                optimizer=self.optimizer.log_alpha,
+            self.flax_optimizer.log_alpha = alpha_step(
+                optimizer=self.flax_optimizer.log_alpha,
                 log_p=log_p,
                 target_entropy=self.target_entropy,
             )
 
         self.critic_target = copy_params(
-            self.optimizer.critic.target, self.critic_target, self.tau
+            self.flax_optimizer.critic.target, self.critic_target, self.tau
         )
 
     def select_action(self, state):
-        mu, _ = apply_model(self.optimizer.actor.target, state)
+        mu, _ = apply_model(self.flax_optimizer.actor.target, state)
         return mu.flatten()
 
     def sample_action(self, rng, state):
-        mu, log_sig = apply_model(self.optimizer.actor.target, state)
+        mu, log_sig = apply_model(self.flax_optimizer.actor.target, state)
         return mu + random.normal(rng, mu.shape) * jnp.exp(log_sig)
 
     def train(self, replay_buffer, batch_size=100, load_path=None):
