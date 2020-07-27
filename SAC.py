@@ -80,27 +80,6 @@ def alpha_loss_fn(log_alpha, target_entropy, log_p):
 
 
 @jax.jit
-def get_td_target(
-    actor,
-    critic_target,
-    log_alpha,
-    discount,
-    rng: PRNGKey,
-    params: Params,
-    next_obs: jnp.ndarray,
-    reward: jnp.ndarray,
-    not_done: jnp.ndarray,
-):
-    next_action, next_log_p = actor(next_obs, sample=True, key=rng)
-
-    target_Q1, target_Q2 = critic_target(next_obs, next_action)
-    target_Q = jnp.minimum(target_Q1, target_Q2) - jnp.exp(log_alpha()) * next_log_p
-    target_Q = reward + not_done * discount * target_Q
-
-    return target_Q
-
-
-@jax.jit
 def critic_step(optimizer, state, action, target_Q):
     def loss_fn(critic):
         current_Q1, current_Q2 = critic(state, action)
@@ -243,6 +222,27 @@ class SAC:
         self.flax_optimizer.log_alpha = jax.device_put(self.flax_optimizer.log_alpha)
         return vars(params), vars(opt_params)
 
+    @functools.partial(jax.jit, static_argnums=0)
+    def flax_get_td_target(
+        self,
+        actor,
+        critic_target,
+        log_alpha,
+        discount,
+        rng: PRNGKey,
+        params: Params,
+        next_obs: jnp.ndarray,
+        reward: jnp.ndarray,
+        not_done: jnp.ndarray,
+    ):
+        next_action, next_log_p = actor(next_obs, sample=True, key=rng)
+
+        target_Q1, target_Q2 = critic_target(next_obs, next_action)
+        target_Q = jnp.minimum(target_Q1, target_Q2) - jnp.exp(log_alpha()) * next_log_p
+        target_Q = reward + not_done * discount * target_Q
+
+        return target_Q
+
     def get_td_target(
         self,
         rng: PRNGKey,
@@ -337,7 +337,7 @@ class SAC:
     def update_critic_flax(self, params, obs, action, next_obs, reward, not_done):
         critic_target = self.critic_target
         target_Q = jax.lax.stop_gradient(
-            get_td_target(
+            self.flax_get_td_target(
                 rng=next(self.rng),
                 next_obs=next_obs,
                 reward=reward,
