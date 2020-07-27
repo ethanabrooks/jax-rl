@@ -317,30 +317,27 @@ class SAC:
         updates, _opt_params = optimizer.update(grad, _opt_params)
         return (optix.apply_updates(_params, updates), _opt_params)
 
-    @functools.partial(jax.jit, static_argnums=0)
-    def update_critic(self, params: dict, opt_params: dict, obs, action, **kwargs):
-        params = Params(**params)
-        opt_params = OptParams(**opt_params)
-
-        target_Q = jax.lax.stop_gradient(
-            self.get_td_target(rng=next(self.rng), params=params, **kwargs,)
-        )
-
-        params.critic, opt_params.critic = self.apply_updates(
-            grad=jax.grad(self.critic_loss)(
-                params.critic, obs=obs, action=action, target_Q=target_Q
-            ),
-            optimizer=self.optimizer.critic,
-            _params=params.critic,
-            _opt_params=opt_params.critic,
-        )
-
-        return vars(params), vars(opt_params)
-
-    def update(self, training_data):
-        self.i += 1
+    # @functools.partial(jax.jit, static_argnums=0)
+    # def update_critic(self, params: dict, opt_params: dict, obs, action, **kwargs):
+    #     params = Params(**params)
+    #     opt_params = OptParams(**opt_params)
+    #
+    #     target_Q = jax.lax.stop_gradient(
+    #         self.get_td_target(rng=next(self.rng), params=params, **kwargs,)
+    #     )
+    #
+    #     params.critic, opt_params.critic = self.apply_updates(
+    #         grad=jax.grad(self.critic_loss)(
+    #             params.critic, obs=obs, action=action, target_Q=target_Q
+    #         ),
+    #         optimizer=self.optimizer.critic,
+    #         _params=params.critic,
+    #         _opt_params=opt_params.critic,
+    #     )
+    #
+    #     return vars(params), vars(opt_params)
+    def update_critic(self, training_data):
         state, action, _, _, _ = training_data
-
         target_Q = jax.lax.stop_gradient(
             get_td_target(
                 next(self.rng),
@@ -352,33 +349,38 @@ class SAC:
                 log_alpha=self.optimizer.log_alpha.target,
             )
         )
-
         self.optimizer.critic = critic_step(
             optimizer=self.optimizer.critic,
             state=state,
             action=action,
             target_Q=target_Q,
         )
+        return state
+
+    def update_actor(self, state):
+        self.optimizer.actor, log_p = actor_step(
+            rng=next(self.rng),
+            optimizer=self.optimizer.actor,
+            critic=self.optimizer.critic,
+            state=state,
+            log_alpha=self.optimizer.log_alpha,
+        )
+        if self.entropy_tune:
+            self.optimizer.log_alpha = alpha_step(
+                optimizer=self.optimizer.log_alpha,
+                log_p=log_p,
+                target_entropy=self.target_entropy,
+            )
+        self.critic_target = copy_params(
+            self.optimizer.critic.target, self.critic_target, self.tau
+        )
+
+    def update(self, training_data):
+        self.i += 1
+        state = self.update_critic(training_data)
 
         if self.i % self.actor_freq == 0:
-            self.optimizer.actor, log_p = actor_step(
-                rng=next(self.rng),
-                optimizer=self.optimizer.actor,
-                critic=self.optimizer.critic,
-                state=state,
-                log_alpha=self.optimizer.log_alpha,
-            )
-
-            if self.entropy_tune:
-                self.optimizer.log_alpha = alpha_step(
-                    optimizer=self.optimizer.log_alpha,
-                    log_p=log_p,
-                    target_entropy=self.target_entropy,
-                )
-
-            self.critic_target = copy_params(
-                self.optimizer.critic.target, self.critic_target, self.tau
-            )
+            self.update_actor(state)
 
     def select_action(self, state):
         mu, _ = apply_model(self.optimizer.actor.target, state)
