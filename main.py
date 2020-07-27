@@ -197,7 +197,7 @@ def main(config, use_tune, num_samples, local_mode, env, load_path):
         ray.init(webui_host="127.0.0.1", local_mode=local_mode)
         metric = "reward"
         if local_mode:
-            tune.run(train, config=config)
+            tune.run(train, config=config, resources_per_trial={"gpu": 1, "cpu": 2})
         else:
             tune.run(
                 train,
