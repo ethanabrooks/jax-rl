@@ -19,4 +19,6 @@ search = dict(
     seed=hp.randint("seed", 20),
 )
 
-deterministic = dict(max_time_steps=100000)
+deterministic = dict(
+    batch_size=128, learning_rate=0.01, policy_freq=1, seed=5, tau=0.005
+)
