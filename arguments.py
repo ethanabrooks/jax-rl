@@ -12,6 +12,9 @@ def add_arguments(parser):
     parser.add_argument(
         "--eval-freq", default=5e3, type=int
     )  # How often (time steps) we evaluate
+    parser.add_argument(
+        "--eval-episodes", default=10, type=int
+    )  # How often (time steps) we evaluate
     # parser.add_argument(
     #     "--expl-noise", default=0.1
     # )  # Std of Gaussian exploration noise
@@ -19,7 +22,7 @@ def add_arguments(parser):
         "--learning-rate", default=3e-4, type=float
     )  # Noise added to target policy during critic update
     parser.add_argument(
-        "--load-model", default=None
+        "--load-path", default=None
     )  # Model load file name, "" doesn't load, "default" uses file_name
     parser.add_argument(
         "--max-time-steps", default=1e6, type=int
@@ -42,12 +45,12 @@ def add_arguments(parser):
     parser.add_argument(
         "--save-model", action="store_true"
     )  # Save model and optimizer parameters
-    # parser.add_argument("--seed", default=0, type=int)  # Sets DM control and JAX seeds
-    # parser.add_argument(
-    #     "--start-time-steps", default=1e4, type=int
-    # )  # Time steps initial random policy is used
-    # parser.add_argument("--tau", default=0.005)  # Target network update rate
-    # parser.add_argument("--train-steps", default=1, type=int)
+    parser.add_argument("--seed", default=0, type=int)  # Sets DM control and JAX seeds
+    parser.add_argument(
+        "--start-time-steps", default=1e4, type=int
+    )  # Time steps initial random policy is used
+    parser.add_argument("--tau", default=0.005)  # Target network update rate
+    parser.add_argument("--train-steps", default=1, type=int)
     # parser.add_argument(
     #     "--actor-updates", default=1, type=int
     # )  # Number of gradient steps for policy network per update
