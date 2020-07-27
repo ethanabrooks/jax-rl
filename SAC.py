@@ -164,6 +164,7 @@ class SAC:
         lr=3e-4,
         entropy_tune=True,
         seed=0,
+        initial_log_alpha=-3.5,
     ):
 
         self.rng = PRNGSequence(seed)
@@ -176,11 +177,32 @@ class SAC:
 
         init_rng = next(self.rng)
 
+        def actor(obs, key=None):
+            return GaussianPolicy(action_dim=action_dim, max_action=max_action)(
+                obs, key
+            )
+
+        def critic(obs, action):
+            return DoubleCritic()(obs, action)
+
+        def log_alpha(_=None):
+            return Constant()(initial_log_alpha)
+
         self.critic_input_dim = [
             ((1, *state_shape), jnp.float32),
             ((1, action_dim), jnp.float32),
         ]
         self.critic = build_double_critic_model(self.critic_input_dim, init_rng)
+
+        def transform(f) -> hk.Transformed:
+            return hk.without_apply_rng(hk.transform(f, apply_rng=True))
+
+        self.net = Nets(
+            actor=transform(actor),
+            critic=transform(critic),
+            target_critic=transform(critic),
+            log_alpha=transform(log_alpha),
+        )
         self.entropy_tune = entropy_tune
         self.log_alpha = build_constant_model(-3.5, next(self.rng))
         self.target_entropy = -action_dim
@@ -190,7 +212,11 @@ class SAC:
             critic=optim.Adam(learning_rate=lr),
             log_alpha=optim.Adam(learning_rate=lr),
         )
-        self.optimizer = None
+        self.optimizer = Optimizers(
+            actor=optix.adam(learning_rate=lr),
+            critic=optix.adam(learning_rate=lr),
+            log_alpha=optix.adam(learning_rate=lr),
+        )
 
         self.max_action = max_action
         self.discount = discount

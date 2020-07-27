@@ -30,7 +30,7 @@ def add_arguments(parser):
     parser.add_argument("--num-action-samples", default=20, type=int)
     parser.add_argument("--policy", default="SAC")  # Policy name (TD3, SAC, or MPO)
     parser.add_argument(
-        "--policy-freq", default=2, type=int
+        "--actor-freq", default=2, type=int
     )  # Frequency of delayed policy updates
     parser.add_argument(
         "--policy-noise", default=0.2

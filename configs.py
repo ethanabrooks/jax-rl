@@ -14,11 +14,11 @@ def big_values(start, stop):
 search = dict(
     learning_rate=hp.choice("learning_rate", small_values(2, 5)),
     batch_size=hp.choice("batch_size", big_values(6, 10)),
-    policy_freq=hp.choice("policy_freq", [1, 2, 3]),
+    policy_freq=hp.choice("actor_freq", [1, 2, 3]),
     tau=hp.choice("tau", small_values(2, 5)),
     seed=hp.randint("seed", 20),
 )
 
 deterministic = dict(
-    batch_size=128, learning_rate=0.01, policy_freq=1, seed=5, tau=0.005
+    batch_size=128, learning_rate=0.01, actor_freq=1, seed=5, tau=0.005
 )
