@@ -63,7 +63,7 @@ class Trainer:
         def make_env():
             return Environment.wrap(gym.make(env_id) if env_id else Env(1000))
 
-        def eval_policy():
+        def eval_policy(params):
             eval_env = make_env()
             eval_env.seed(seed)
 
@@ -118,17 +118,17 @@ class Trainer:
         max_action = self.env.max_action()
         time_step = self.env.reset()
         iterator = self.generator(time_step)
-        obs = next(iterator)
+        obs, params = next(iterator)
         for t in itertools.count():
             if t % self.eval_freq == 0:
-                self.eval_policy()
+                self.eval_policy(params)
 
             if t < self.start_time_steps:
                 action = self.env.action_space.sample()
             else:
                 action = self.policy.sample_action(next(self.rng), obs).squeeze(0)
                 action = action.clip(-max_action, max_action)
-            obs = iterator.send(action)
+            obs, params = iterator.send(action)
 
     def report(self, **kwargs):
         if self.use_tune:
@@ -158,7 +158,7 @@ class Trainer:
             obs = time_step.observation
 
             # Select action randomly or according to policy
-            action = yield obs
+            action = yield obs, params["actor"]
 
             # Perform action
             time_step = self.env.step(action)
