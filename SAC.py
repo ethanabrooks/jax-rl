@@ -80,17 +80,6 @@ def alpha_loss_fn(log_alpha, target_entropy, log_p):
 
 
 @jax.jit
-def critic_step(optimizer, state, action, target_Q):
-    def loss_fn(critic):
-        current_Q1, current_Q2 = critic(state, action)
-        critic_loss = double_mse(current_Q1, current_Q2, target_Q)
-        return jnp.mean(critic_loss)
-
-    grad = jax.grad(loss_fn)(optimizer.target)
-    return optimizer.apply_gradient(grad)
-
-
-@jax.jit
 def actor_step(rng, optimizer, critic, state, log_alpha):
     critic, log_alpha = critic.target, log_alpha.target
 
@@ -331,12 +320,13 @@ class SAC:
             )
         )
 
-        self.flax_optimizer.critic = critic_step(
-            optimizer=self.flax_optimizer.critic,
-            state=obs,
-            action=action,
-            target_Q=target_Q,
-        )
+        def loss_fn(critic):
+            current_Q1, current_Q2 = critic(obs, action)
+            critic_loss = double_mse(current_Q1, current_Q2, target_Q)
+            return jnp.mean(critic_loss)
+
+        grad = jax.grad(loss_fn)(self.flax_optimizer.critic.target)
+        self.flax_optimizer.critic = self.flax_optimizer.critic.apply_gradient(grad)
 
     @functools.partial(jax.jit, static_argnums=0)
     def update_actor(self, params: dict, opt_params: dict, obs: jnp.ndarray):
