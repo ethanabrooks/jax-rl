@@ -222,7 +222,6 @@ class SAC:
         self.flax_optimizer.log_alpha = jax.device_put(self.flax_optimizer.log_alpha)
         return vars(params), vars(opt_params)
 
-    @functools.partial(jax.jit, static_argnums=0)
     def get_td_target(
         self,
         critic_target,
@@ -319,6 +318,9 @@ class SAC:
     def update_critic_flax(
         self, params: dict, opt_params: dict, obs, action, **kwargs,
     ):
+        params = Params(**params)
+        opt_params = OptParams(**opt_params)
+
         critic_target = self.critic_target
         target_Q = jax.lax.stop_gradient(
             self.get_td_target(
