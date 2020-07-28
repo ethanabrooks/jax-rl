@@ -289,10 +289,7 @@ class SAC:
         self, params: dict, opt_params: dict, **kwargs,
     ):
 
-        critic_target = self.critic_target
-        self.flax_optimizer.critic = self._update_critic(
-            params=params, critic_target=critic_target, **kwargs
-        )
+        self.flax_optimizer.critic = self._update_critic(params=params, **kwargs)
         params = Params(**params)
         opt_params = OptParams(**opt_params)
 
@@ -309,14 +306,14 @@ class SAC:
         return vars(params), vars(opt_params)
 
     @functools.partial(jax.jit, static_argnums=0)
-    def _update_critic(self, params, critic_target, action, obs, **kwargs):
+    def _update_critic(self, params, action, obs, **kwargs):
         params = Params(**params)
 
         target_Q = jax.lax.stop_gradient(
             self.get_td_target(
                 rng=next(self.rng),
                 **kwargs,
-                critic_target=critic_target,
+                critic_target=self.critic_target,
                 params=params,
             )
         )
