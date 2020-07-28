@@ -237,13 +237,16 @@ class SAC:
         obs: jnp.ndarray,
         key: PRNGKey,
     ):
-        actor_action, log_p = self.net.actor.apply(actor, obs, key=key)
-        q1, q2 = self.net.critic.apply(critic, obs, actor_action)
+        # actor_action, log_p = self.net.actor.apply(actor, obs, key=key)
+        actor_action, log_p = actor(obs, key=key)
+        # q1, q2 = self.net.critic.apply(critic, obs, actor_action)
+        q1, q2 = self.flax_optimizer.critic.target(obs, actor_action)
         min_q = jnp.minimum(q1, q2)
         partial_loss_fn = jax.vmap(
             partial(
                 actor_loss_fn,
-                jax.lax.stop_gradient(self.net.log_alpha.apply(log_alpha)),
+                # jax.lax.stop_gradient(self.net.log_alpha.apply(log_alpha)),
+                jax.lax.stop_gradient(self.flax_optimizer.log_alpha.target()),
             )
         )
         actor_loss = partial_loss_fn(log_p, min_q)
@@ -302,22 +305,14 @@ class SAC:
     def update_actor(self, params: dict, opt_params: dict, obs: jnp.ndarray):
         params = Params(**params)
         opt_params = OptParams(**opt_params)
-
-        def loss_fn(actor):
-            actor_action, log_p = actor(obs, sample=True, key=next(self.rng))
-            q1, q2 = self.flax_optimizer.critic.target(obs, actor_action)
-            min_q = jnp.minimum(q1, q2)
-            partial_loss_fn = jax.vmap(
-                partial(
-                    actor_loss_fn,
-                    jax.lax.stop_gradient(self.flax_optimizer.log_alpha.target()),
-                )
-            )
-            actor_loss = partial_loss_fn(log_p, min_q)
-            return jnp.mean(actor_loss), log_p
-
         optimizer = self.flax_optimizer.actor
-        grad, log_p = jax.grad(loss_fn, has_aux=True)(optimizer.target)
+        grad, log_p = jax.grad(self.actor_loss, has_aux=True)(
+            optimizer.target,
+            critic=params.critic,
+            log_alpha=params.log_alpha,
+            obs=obs,
+            key=next(self.rng),
+        )
         self.flax_optimizer.actor = optimizer.apply_gradient(grad)
 
         # grad, log_p = jax.grad(self.actor_loss, has_aux=True)(
