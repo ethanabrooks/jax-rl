@@ -44,20 +44,20 @@ class DoubleCritic(nn.Module):
         state_action = jnp.concatenate([state, action], axis=1)
 
         q1 = nn.Dense(state_action, features=500)
-        q1 = nn.LayerNorm(q1)
-        q1 = nn.tanh(q1)
+        # q1 = nn.LayerNorm(q1)
+        q1 = nn.relu(q1)
         q1 = nn.Dense(q1, features=500)
-        q1 = nn.elu(q1)
+        q1 = nn.relu(q1)
         q1 = nn.Dense(q1, features=1)
 
         if Q1:
             return q1
 
         q2 = nn.Dense(state_action, features=500)
-        q2 = nn.LayerNorm(q2)
-        q2 = nn.tanh(q2)
+        # q2 = nn.LayerNorm(q2)
+        q2 = nn.relu(q2)
         q2 = nn.Dense(q2, features=500)
-        q2 = nn.elu(q2)
+        q2 = nn.relu(q2)
         q2 = nn.Dense(q2, features=1)
 
         return q1, q2
