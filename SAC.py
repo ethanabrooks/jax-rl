@@ -315,6 +315,7 @@ class SAC:
         #
         return vars(params), vars(opt_params)
 
+    @functools.partial(jax.jit, static_argnums=0)
     def _update_critic(self, action, obs, target_Q):
         grad = jax.grad(self.critic_loss)(
             self.flax_optimizer.critic.target, obs, action, target_Q
