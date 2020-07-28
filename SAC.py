@@ -286,22 +286,15 @@ class SAC:
 
     # @functools.partial(jax.jit, static_argnums=0)
     def update_critic(
-        self, params: dict, opt_params: dict, obs, action, **kwargs,
+        self, params: dict, opt_params: dict, **kwargs,
     ):
-        params = Params(**params)
-        opt_params = OptParams(**opt_params)
 
         critic_target = self.critic_target
-        target_Q = jax.lax.stop_gradient(
-            self.get_td_target(
-                rng=next(self.rng),
-                **kwargs,
-                critic_target=critic_target,
-                params=params,
-            )
+        self.flax_optimizer.critic = self._update_critic(
+            params=params, critic_target=critic_target, **kwargs
         )
-
-        self.flax_optimizer.critic = self._update_critic(action, obs, target_Q)
+        params = Params(**params)
+        opt_params = OptParams(**opt_params)
 
         # grad = jax.grad(self.critic_loss)(
         #     params.critic, obs=obs, action=action, target_Q=target_Q
@@ -316,7 +309,18 @@ class SAC:
         return vars(params), vars(opt_params)
 
     @functools.partial(jax.jit, static_argnums=0)
-    def _update_critic(self, action, obs, target_Q):
+    def _update_critic(self, params, critic_target, action, obs, **kwargs):
+        params = Params(**params)
+
+        target_Q = jax.lax.stop_gradient(
+            self.get_td_target(
+                rng=next(self.rng),
+                **kwargs,
+                critic_target=critic_target,
+                params=params,
+            )
+        )
+
         grad = jax.grad(self.critic_loss)(
             self.flax_optimizer.critic.target, obs, action, target_Q
         )
