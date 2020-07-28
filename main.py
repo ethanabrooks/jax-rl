@@ -182,11 +182,8 @@ class Trainer:
                         params=params, opt_params=opt_params, **vars(data),
                     )
                     if (t * self.train_steps + i) % self.policy.actor_freq == 0:
-                        (
-                            params["log_alpha"],
-                            opt_params["log_alpha"],
-                        ) = self.policy.update_actor(
-                            params["log_alpha"], opt_params["log_alpha"], data.obs
+                        (params, opt_params,) = self.policy.update_actor(
+                            params, opt_params, data.obs
                         )
 
             if time_step.last():

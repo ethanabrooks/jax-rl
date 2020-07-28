@@ -327,18 +327,21 @@ class SAC:
         return optix.apply_updates(params, updates), opt_params
 
     def update_actor(self, params, opt_params, state):
+        params = Params(**params)
+        opt_params = OptParams(**opt_params)
+
         self.flax_optimizer.actor, log_p = self.actor_step(
             rng=next(self.rng),
             optimizer=self.flax_optimizer.actor,
             critic=self.flax_optimizer.critic,
             state=state,
-            log_alpha=params,
+            log_alpha=params.log_alpha,
         )
 
         if self.entropy_tune:
-            params, opt_params = self.alpha_step(
-                params=params,
-                opt_params=opt_params,
+            params.log_alpha, opt_params.log_alpha = self.alpha_step(
+                params=params.log_alpha,
+                opt_params=opt_params.log_alpha,
                 log_p=log_p,
                 target_entropy=self.target_entropy,
             )
@@ -346,7 +349,7 @@ class SAC:
         self.critic_target = copy_params(
             self.flax_optimizer.critic.target, self.critic_target, self.tau
         )
-        return params, opt_params
+        return vars(params), vars(opt_params)
 
     def select_action(self, state):
         mu, _ = apply_model(self.flax_optimizer.actor.target, state)
