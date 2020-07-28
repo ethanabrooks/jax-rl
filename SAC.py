@@ -357,9 +357,14 @@ class SAC:
                 target_entropy=self.target_entropy,
             )
 
-        self.critic_target = copy_params(
-            self.flax_optimizer.critic.target, self.critic_target, self.tau
+        self.critic_target = self.critic_target.replace(
+            params=copy_params(
+                self.flax_optimizer.critic.target.params,
+                self.critic_target.params,
+                self.tau,
+            )
         )
+
         return vars(params), vars(opt_params)
 
     def select_action(self, params, obs):
