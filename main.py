@@ -202,7 +202,7 @@ class Trainer:
                 episode_num += 1
 
 
-def main(config, use_tune, num_samples, local_mode, env, **kwargs):
+def main(config, use_tune, num_samples, local_mode, env, name, **kwargs):
     config = getattr(configs, config)
     config.update(env_id=env)
     for k, v in kwargs.items():
@@ -212,11 +212,17 @@ def main(config, use_tune, num_samples, local_mode, env, **kwargs):
         ray.init(webui_host="127.0.0.1", local_mode=local_mode)
         metric = "reward"
         if local_mode:
-            tune.run(train, config=config, resources_per_trial={"gpu": 1, "cpu": 2})
+            tune.run(
+                train,
+                name=name,
+                config=config,
+                resources_per_trial={"gpu": 1, "cpu": 2},
+            )
         else:
             tune.run(
                 train,
                 config=config,
+                name=name,
                 resources_per_trial={"gpu": 1, "cpu": 2},
                 # scheduler=ASHAScheduler(metric=metric, mode="max"),
                 search_alg=HyperOptSearch(config, metric=metric, mode="max"),
@@ -232,5 +238,6 @@ if __name__ == "__main__":
     PARSER.add_argument("--no-tune", dest="use_tune", action="store_false")
     PARSER.add_argument("--local-mode", action="store_true")
     PARSER.add_argument("--num-samples", type=int)
+    PARSER.add_argument("--name")
     add_arguments(PARSER)
     main(**vars(PARSER.parse_args()))
