@@ -322,7 +322,7 @@ class SAC:
         grad = jax.grad(loss_fn)(optimizer.target)
         return optimizer.apply_gradient(grad)
 
-    def update_actor(self, state):
+    def update_actor(self, params, opt_params, state):
         self.flax_optimizer.actor, log_p = self.actor_step(
             rng=next(self.rng),
             optimizer=self.flax_optimizer.actor,
@@ -341,6 +341,7 @@ class SAC:
         self.critic_target = copy_params(
             self.flax_optimizer.critic.target, self.critic_target, self.tau
         )
+        return params, opt_params
 
     def select_action(self, state):
         mu, _ = apply_model(self.flax_optimizer.actor.target, state)
