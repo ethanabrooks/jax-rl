@@ -292,8 +292,6 @@ class SAC:
 
     @functools.partial(jax.jit, static_argnums=0)
     def actor_step(self, rng, actor, critic, state, log_alpha, opt_params):
-        critic = critic.target
-
         def loss_fn(actor):
             actor_action, log_p = self.net.actor.apply(actor, state, key=rng)
             q1, q2 = critic(state, actor_action)
@@ -343,7 +341,7 @@ class SAC:
         params.actor, opt_params.actor, log_p = self.actor_step(
             rng=next(self.rng),
             actor=params.actor,
-            critic=self.flax_optimizer.critic,
+            critic=self.flax_optimizer.critic.target,
             state=state,
             log_alpha=params.log_alpha,
             opt_params=opt_params.actor,
