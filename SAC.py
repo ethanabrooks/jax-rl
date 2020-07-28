@@ -259,6 +259,7 @@ class SAC:
         self, params: dict, opt_params: dict, obs, action, **kwargs,
     ):
         params = Params(**params)
+        opt_params = OptParams(**opt_params)
 
         target_Q = jax.lax.stop_gradient(
             self.get_td_target(
@@ -269,14 +270,13 @@ class SAC:
             )
         )
 
-        self.flax_optimizer.critic = self.critic_step(
-            optimizer=self.flax_optimizer.critic,
+        params.critic, opt_params.critic = self.critic_step(
+            critic=params.critic,
             state=obs,
             action=action,
             target_Q=target_Q,
+            opt_params=opt_params.critic,
         )
-
-        opt_params = OptParams(**opt_params)
 
         # grad = jax.grad(self.critic_loss)(
         #     params.critic, obs=obs, action=action, target_Q=target_Q
@@ -292,11 +292,9 @@ class SAC:
 
     @functools.partial(jax.jit, static_argnums=0)
     def actor_step(self, rng, actor, critic, state, log_alpha, opt_params):
-        critic = critic.target
-
         def loss_fn(actor):
             actor_action, log_p = self.net.actor.apply(actor, state, key=rng)
-            q1, q2 = critic(state, actor_action)
+            q1, q2 = self.net.critic.apply(critic, state, actor_action)
             min_q = jnp.minimum(q1, q2)
             partial_loss_fn = jax.vmap(
                 partial(
@@ -313,14 +311,16 @@ class SAC:
         return optix.apply_updates(actor, updates), opt_params, log_p
 
     @functools.partial(jax.jit, static_argnums=0)
-    def critic_step(self, optimizer, state, action, target_Q):
+    def critic_step(self, critic, opt_params, state, action, target_Q):
         def loss_fn(critic):
-            current_Q1, current_Q2 = critic(state, action)
+            current_Q1, current_Q2 = self.net.critic.apply(critic, state, action)
             critic_loss = double_mse(current_Q1, current_Q2, target_Q)
             return jnp.mean(critic_loss)
 
-        grad = jax.grad(loss_fn)(optimizer.target)
-        return optimizer.apply_gradient(grad)
+        grad = jax.grad(loss_fn)(critic)
+        # return optimizer.apply_gradient(grad)
+        updates, opt_params = self.optimizer.log_alpha.update(grad, opt_params)
+        return optix.apply_updates(critic, updates), opt_params
 
     @functools.partial(jax.jit, static_argnums=0)
     def alpha_step(self, params, opt_params, log_p, target_entropy):
@@ -343,7 +343,7 @@ class SAC:
         params.actor, opt_params.actor, log_p = self.actor_step(
             rng=next(self.rng),
             actor=params.actor,
-            critic=self.flax_optimizer.critic,
+            critic=params.critic,
             state=state,
             log_alpha=params.log_alpha,
             opt_params=opt_params.actor,
@@ -357,8 +357,8 @@ class SAC:
                 target_entropy=self.target_entropy,
             )
 
-        self.critic_target = copy_params(
-            self.flax_optimizer.critic.target, self.critic_target, self.tau
+        params.target_critic = copy_params(
+            params.critic, params.target_critic, self.tau
         )
         return vars(params), vars(opt_params)
 
