@@ -79,18 +79,6 @@ def alpha_loss_fn(log_alpha, target_entropy, log_p):
     return (log_alpha * (-log_p - target_entropy)).mean()
 
 
-@jax.jit
-def alpha_step(optimizer, log_p, target_entropy):
-    log_p = jax.lax.stop_gradient(log_p)
-
-    def loss_fn(log_alpha):
-        partial_loss_fn = jax.vmap(partial(alpha_loss_fn, log_alpha(), target_entropy))
-        return jnp.mean(partial_loss_fn(log_p))
-
-    grad = jax.grad(loss_fn)(optimizer.target)
-    return optimizer.apply_gradient(grad)
-
-
 class SAC:
     def __init__(
         self,
@@ -305,15 +293,14 @@ class SAC:
     def update_actor(self, params: dict, opt_params: dict, obs: jnp.ndarray):
         params = Params(**params)
         opt_params = OptParams(**opt_params)
-        optimizer = self.flax_optimizer.actor
         grad, log_p = jax.grad(self.actor_loss, has_aux=True)(
-            optimizer.target,
+            self.flax_optimizer.actor.target,
             critic=params.critic,
             log_alpha=params.log_alpha,
             obs=obs,
             key=next(self.rng),
         )
-        self.flax_optimizer.actor = optimizer.apply_gradient(grad)
+        self.flax_optimizer.actor = self.flax_optimizer.actor.apply_gradient(grad)
 
         # grad, log_p = jax.grad(self.actor_loss, has_aux=True)(
         #     params.actor,
@@ -330,11 +317,27 @@ class SAC:
         # )
 
         if self.entropy_tune:
-            self.flax_optimizer.log_alpha = alpha_step(
-                optimizer=self.flax_optimizer.log_alpha,
-                log_p=log_p,
-                target_entropy=self.target_entropy,
+
+            def loss_fn(log_alpha):
+                partial_loss_fn = jax.vmap(
+                    partial(
+                        alpha_loss_fn,
+                        self.flax_optimizer.log_alpha.target(),
+                        self.target_entropy,
+                    )
+                )
+                return jnp.mean(partial_loss_fn(log_p))
+
+            grad = jax.grad(loss_fn)(self.flax_optimizer.log_alpha.target)
+            self.flax_optimizer.log_alpha = self.flax_optimizer.log_alpha.apply_gradient(
+                grad
             )
+
+            # self.flax_optimizer.log_alpha = alpha_step(
+            #     optimizer=self.flax_optimizer.log_alpha,
+            #     log_p=log_p,
+            #     target_entropy=self.target_entropy,
+            # )
 
         self.critic_target = copy_params(
             self.flax_optimizer.critic.target, self.critic_target, self.tau
