@@ -76,10 +76,10 @@ class GaussianPolicy(nn.Module):
         log_sig_max=2,
     ):
         x = nn.Dense(x, features=200)
-        x = nn.LayerNorm(x)
-        x = nn.tanh(x)
+        # x = nn.LayerNorm(x)
+        x = nn.relu(x)
         x = nn.Dense(x, features=200)
-        x = nn.elu(x)
+        x = nn.relu(x)
         x = nn.Dense(x, features=2 * action_dim)
 
         mu, log_sig = jnp.split(x, 2, axis=-1)
