@@ -301,8 +301,7 @@ class SAC:
             )
         )
 
-        grad = self._update_critic(action, obs, target_Q)
-        self.flax_optimizer.critic = self.flax_optimizer.critic.apply_gradient(grad)
+        self.flax_optimizer.critic = self._update_critic(action, obs, target_Q)
 
         # grad = jax.grad(self.critic_loss)(
         #     params.critic, obs=obs, action=action, target_Q=target_Q
@@ -320,7 +319,7 @@ class SAC:
         grad = jax.grad(self.critic_loss)(
             self.flax_optimizer.critic.target, obs, action, target_Q
         )
-        return grad
+        return self.flax_optimizer.critic.apply_gradient(grad)
 
     @functools.partial(jax.jit, static_argnums=0)
     def update_actor(self, params: dict, opt_params: dict, obs: jnp.ndarray):
