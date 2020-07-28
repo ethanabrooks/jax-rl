@@ -178,7 +178,7 @@ class Trainer:
                     # self.policy.update_critic(
                     #     params=params, opt_params=opt_params, **vars(data)
                     # )
-                    self.policy.update_critic_flax(
+                    params, opt_params = self.policy.update_critic(
                         params=params, opt_params=opt_params, **vars(data),
                     )
                     if (t * self.train_steps + i) % self.policy.actor_freq == 0:

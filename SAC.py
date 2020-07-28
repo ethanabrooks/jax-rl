@@ -235,8 +235,8 @@ class SAC:
         return target_Q
 
     # noinspection PyPep8Naming
+    @staticmethod
     def critic_loss(
-        self,
         params: jnp.ndarray,
         obs: jnp.ndarray,
         action: jnp.ndarray,
@@ -284,28 +284,8 @@ class SAC:
         updates, _opt_params = optimizer.update(grad, _opt_params)
         return (optix.apply_updates(_params, updates), _opt_params)
 
-    @functools.partial(jax.jit, static_argnums=0)
-    def update_critic(self, params: dict, opt_params: dict, obs, action, **kwargs):
-        params = Params(**params)
-        opt_params = OptParams(**opt_params)
-
-        target_Q = jax.lax.stop_gradient(
-            self.get_td_target(rng=next(self.rng), params=params, **kwargs,)
-        )
-
-        grad = jax.grad(self.critic_loss)(
-            params.critic, obs=obs, action=action, target_Q=target_Q
-        )
-        params.critic, opt_params.critic = self.apply_updates(
-            grad=grad,
-            optimizer=self.optimizer.critic,
-            _params=params.critic,
-            _opt_params=opt_params.critic,
-        )
-
-        return vars(params), vars(opt_params)
-
-    def update_critic_flax(
+    # @functools.partial(jax.jit, static_argnums=0)
+    def update_critic(
         self, params: dict, opt_params: dict, obs, action, **kwargs,
     ):
         params = Params(**params)
@@ -325,6 +305,18 @@ class SAC:
             self.flax_optimizer.critic.target, obs, action, target_Q
         )
         self.flax_optimizer.critic = self.flax_optimizer.critic.apply_gradient(grad)
+
+        # grad = jax.grad(self.critic_loss)(
+        #     params.critic, obs=obs, action=action, target_Q=target_Q
+        # )
+        # params.critic, opt_params.critic = self.apply_updates(
+        #     grad=grad,
+        #     optimizer=self.optimizer.critic,
+        #     _params=params.critic,
+        #     _opt_params=opt_params.critic,
+        # )
+        #
+        return vars(params), vars(opt_params)
 
     @functools.partial(jax.jit, static_argnums=0)
     def update_actor(self, params: dict, opt_params: dict, obs: jnp.ndarray):
