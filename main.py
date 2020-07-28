@@ -1,4 +1,5 @@
 import argparse
+import jax.tree_util
 import itertools
 import os
 from pprint import pprint
@@ -180,6 +181,13 @@ class Trainer:
                     # )
                     params, opt_params = self.policy.update_critic(
                         params=params, opt_params=opt_params, **vars(data),
+                    )
+
+                    def f(a, b):
+                        return a.mean() + b.mean()
+
+                    self.report(
+                        critic_params=(jax.tree_util.tree_reduce(f, params["critic"],))
                     )
                     if (t * self.train_steps + i) % self.policy.actor_freq == 0:
                         params = self.policy.update_actor(params, data.obs)
