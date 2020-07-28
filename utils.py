@@ -52,9 +52,11 @@ class ReplayBuffer(object):
 
 @jax.jit
 def copy_params(model, model_target, tau):
-    return jax.tree_multimap(
-        lambda m1, mt: tau * m1 + (1 - tau) * mt, model, model_target
+    update_params = jax.tree_multimap(
+        lambda m1, mt: tau * m1 + (1 - tau) * mt, model.params, model_target.params
     )
+
+    return model_target.replace(params=update_params)
 
 
 @jax.vmap
