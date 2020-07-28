@@ -80,24 +80,6 @@ def alpha_loss_fn(log_alpha, target_entropy, log_p):
 
 
 @jax.jit
-def actor_step(rng, optimizer, critic, state, log_alpha):
-    critic, log_alpha = critic.target, log_alpha.target
-
-    def loss_fn(actor):
-        actor_action, log_p = actor(state, sample=True, key=rng)
-        q1, q2 = critic(state, actor_action)
-        min_q = jnp.minimum(q1, q2)
-        partial_loss_fn = jax.vmap(
-            partial(actor_loss_fn, jax.lax.stop_gradient(log_alpha()))
-        )
-        actor_loss = partial_loss_fn(log_p, min_q)
-        return jnp.mean(actor_loss), log_p
-
-    grad, log_p = jax.grad(loss_fn, has_aux=True)(optimizer.target)
-    return optimizer.apply_gradient(grad), log_p
-
-
-@jax.jit
 def alpha_step(optimizer, log_p, target_entropy):
     log_p = jax.lax.stop_gradient(log_p)
 
@@ -356,8 +338,25 @@ class SAC:
 
         return vars(params), vars(opt_params)
 
+    @functools.partial(jax.jit, static_argnums=0)
+    def actor_step(self, rng, optimizer, critic, state, log_alpha):
+        critic, log_alpha = critic.target, log_alpha.target
+
+        def loss_fn(actor):
+            actor_action, log_p = actor(state, sample=True, key=rng)
+            q1, q2 = critic(state, actor_action)
+            min_q = jnp.minimum(q1, q2)
+            partial_loss_fn = jax.vmap(
+                partial(actor_loss_fn, jax.lax.stop_gradient(log_alpha()))
+            )
+            actor_loss = partial_loss_fn(log_p, min_q)
+            return jnp.mean(actor_loss), log_p
+
+        grad, log_p = jax.grad(loss_fn, has_aux=True)(optimizer.target)
+        return optimizer.apply_gradient(grad), log_p
+
     def update_actor_flax(self, state):
-        self.flax_optimizer.actor, log_p = actor_step(
+        self.flax_optimizer.actor, log_p = self.actor_step(
             rng=next(self.rng),
             optimizer=self.flax_optimizer.actor,
             critic=self.flax_optimizer.critic,
