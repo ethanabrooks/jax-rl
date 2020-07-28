@@ -179,7 +179,7 @@ class Trainer:
                     #     params=params, opt_params=opt_params, **vars(data)
                     # )
                     self.policy.update_critic_flax(
-                        params=params, **vars(data),
+                        params=params, opt_params=opt_params, **vars(data),
                     )
                     if (t * self.train_steps + i) % self.policy.actor_freq == 0:
                         self.policy.update_actor_flax(data.obs)

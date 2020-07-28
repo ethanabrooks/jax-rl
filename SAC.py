@@ -316,14 +316,14 @@ class SAC:
 
         return vars(params), vars(opt_params)
 
-    def update_critic_flax(self, params, obs, action, next_obs, reward, not_done):
+    def update_critic_flax(
+        self, params: dict, opt_params: dict, obs, action, **kwargs,
+    ):
         critic_target = self.critic_target
         target_Q = jax.lax.stop_gradient(
             self.get_td_target(
                 rng=next(self.rng),
-                next_obs=next_obs,
-                reward=reward,
-                not_done=not_done,
+                **kwargs,
                 critic_target=critic_target,
                 params=params,
             )
