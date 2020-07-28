@@ -242,7 +242,8 @@ class SAC:
         action: jnp.ndarray,
         target_Q: jnp.ndarray,
     ):
-        current_Q1, current_Q2 = self.net.critic.apply(params, obs, action)
+        current_Q1, current_Q2 = params(obs, action)
+        # current_Q1, current_Q2 = self.net.critic.apply(params, obs, action)
         critic_loss = double_mse(current_Q1, current_Q2, target_Q)
         return jnp.mean(critic_loss)
 
@@ -320,12 +321,9 @@ class SAC:
             )
         )
 
-        def loss_fn(critic):
-            current_Q1, current_Q2 = critic(obs, action)
-            critic_loss = double_mse(current_Q1, current_Q2, target_Q)
-            return jnp.mean(critic_loss)
-
-        grad = jax.grad(loss_fn)(self.flax_optimizer.critic.target)
+        grad = jax.grad(self.critic_loss)(
+            self.flax_optimizer.critic.target, obs, action, target_Q
+        )
         self.flax_optimizer.critic = self.flax_optimizer.critic.apply_gradient(grad)
 
     @functools.partial(jax.jit, static_argnums=0)
