@@ -79,18 +79,6 @@ def alpha_loss_fn(log_alpha, target_entropy, log_p):
     return (log_alpha * (-log_p - target_entropy)).mean()
 
 
-@jax.jit
-def alpha_step(optimizer, log_p, target_entropy):
-    log_p = jax.lax.stop_gradient(log_p)
-
-    def loss_fn(log_alpha):
-        partial_loss_fn = jax.vmap(partial(alpha_loss_fn, log_alpha(), target_entropy))
-        return jnp.mean(partial_loss_fn(log_p))
-
-    grad = jax.grad(loss_fn)(optimizer.target)
-    return optimizer.apply_gradient(grad)
-
-
 class SAC:
     def __init__(
         self,
@@ -321,6 +309,19 @@ class SAC:
         grad, log_p = jax.grad(loss_fn, has_aux=True)(optimizer.target)
         return optimizer.apply_gradient(grad), log_p
 
+    @functools.partial(jax.jit, static_argnums=0)
+    def alpha_step(self, optimizer, log_p, target_entropy):
+        log_p = jax.lax.stop_gradient(log_p)
+
+        def loss_fn(log_alpha):
+            partial_loss_fn = jax.vmap(
+                partial(alpha_loss_fn, log_alpha(), target_entropy)
+            )
+            return jnp.mean(partial_loss_fn(log_p))
+
+        grad = jax.grad(loss_fn)(optimizer.target)
+        return optimizer.apply_gradient(grad)
+
     def update_actor(self, state):
         self.flax_optimizer.actor, log_p = self.actor_step(
             rng=next(self.rng),
@@ -331,7 +332,7 @@ class SAC:
         )
 
         if self.entropy_tune:
-            self.flax_optimizer.log_alpha = alpha_step(
+            self.flax_optimizer.log_alpha = self.alpha_step(
                 optimizer=self.flax_optimizer.log_alpha,
                 log_p=log_p,
                 target_entropy=self.target_entropy,
