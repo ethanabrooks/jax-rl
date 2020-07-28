@@ -299,12 +299,10 @@ class SAC:
         grad = jax.grad(self.critic_loss)(
             params.critic, obs=obs, action=action, target_Q=target_Q
         )
-        params.critic, opt_params.critic = self.apply_updates(
-            grad=grad,
-            optimizer=self.optimizer.critic,
-            _params=params.critic,
-            _opt_params=opt_params.critic,
+        updates, opt_params.critic = self.optimizer.critic.update(
+            grad, opt_params.critic
         )
+        params.critic = optix.apply_updates(params.critic, updates)
 
         return vars(params), vars(opt_params)
 
