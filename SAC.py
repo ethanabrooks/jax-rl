@@ -305,7 +305,6 @@ class SAC:
         #
         return vars(params), vars(opt_params)
 
-    @functools.partial(jax.jit, static_argnums=0)
     def _update_critic(self, params, action, obs, **kwargs):
         params = Params(**params)
 
