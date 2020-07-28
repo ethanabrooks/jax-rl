@@ -175,9 +175,9 @@ class Trainer:
             if t >= self.start_time_steps:
                 for i in range(self.train_steps):
                     data = replay_buffer.sample(next(self.rng), self.batch_size)
-                    self.policy.update_critic(
-                        params=params, opt_params=opt_params, **vars(data)
-                    )
+                    # self.policy.update_critic(
+                    #     params=params, opt_params=opt_params, **vars(data)
+                    # )
                     self.policy.update_critic_flax(
                         params=params, **vars(data),
                     )

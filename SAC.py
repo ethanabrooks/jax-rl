@@ -223,7 +223,7 @@ class SAC:
         return vars(params), vars(opt_params)
 
     @functools.partial(jax.jit, static_argnums=0)
-    def flax_get_td_target(
+    def get_td_target(
         self,
         critic_target,
         rng: PRNGKey,
@@ -232,6 +232,7 @@ class SAC:
         reward: jnp.ndarray,
         not_done: jnp.ndarray,
     ):
+        # next_action, next_log_p = self.net.actor.apply(params.actor, next_obs, rng)
         next_action, next_log_p = self.flax_optimizer.actor.target(
             next_obs, sample=True, key=rng
         )
@@ -240,27 +241,6 @@ class SAC:
         target_Q = (
             jnp.minimum(target_Q1, target_Q2)
             - jnp.exp(self.flax_optimizer.log_alpha.target()) * next_log_p
-        )
-        target_Q = reward + not_done * self.discount * target_Q
-
-        return target_Q
-
-    def get_td_target(
-        self,
-        rng: PRNGKey,
-        params: Params,
-        next_obs: jnp.ndarray,
-        reward: jnp.ndarray,
-        not_done: jnp.ndarray,
-    ):
-        next_action, next_log_p = self.net.actor.apply(params.actor, next_obs, rng)
-
-        target_Q1, target_Q2 = self.net.target_critic.apply(
-            params.critic, next_obs, next_action
-        )
-        target_Q = (
-            jnp.minimum(target_Q1, target_Q2)
-            - jnp.exp(self.net.log_alpha.apply(params.log_alpha)) * next_log_p
         )
         target_Q = reward + not_done * self.discount * target_Q
 
@@ -339,7 +319,7 @@ class SAC:
     def update_critic_flax(self, params, obs, action, next_obs, reward, not_done):
         critic_target = self.critic_target
         target_Q = jax.lax.stop_gradient(
-            self.flax_get_td_target(
+            self.get_td_target(
                 rng=next(self.rng),
                 next_obs=next_obs,
                 reward=reward,
