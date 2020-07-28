@@ -182,10 +182,7 @@ class Trainer:
                         params=params, opt_params=opt_params, **vars(data),
                     )
                     if (t * self.train_steps + i) % self.policy.actor_freq == 0:
-                        self.policy.update_actor_flax(data.obs)
-                        self.policy.update_actor(
-                            params=params, opt_params=opt_params, obs=data.obs
-                        )
+                        params = self.policy.update_actor(params, data.obs)
 
             if time_step.last():
                 # +1 to account for 0 indexing. +0 on ep_time_steps since it will increment +1 even if done=True
