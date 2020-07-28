@@ -293,11 +293,11 @@ class SAC:
         return self.flax_optimizer.critic.apply_gradient(grad)
 
     @functools.partial(jax.jit, static_argnums=0)
-    def actor_step(self, rng, optimizer, critic, state, log_alpha):
+    def actor_step(self, rng, actor, critic, state, log_alpha, opt_params):
         critic = critic.target
 
         def loss_fn(actor):
-            actor_action, log_p = actor(state, sample=True, key=rng)
+            actor_action, log_p = self.net.actor.apply(actor, state, key=rng)
             q1, q2 = critic(state, actor_action)
             min_q = jnp.minimum(q1, q2)
             partial_loss_fn = jax.vmap(
@@ -309,8 +309,10 @@ class SAC:
             actor_loss = partial_loss_fn(log_p, min_q)
             return jnp.mean(actor_loss), log_p
 
-        grad, log_p = jax.grad(loss_fn, has_aux=True)(optimizer.target)
-        return optimizer.apply_gradient(grad), log_p
+        grad, log_p = jax.grad(loss_fn, has_aux=True)(actor)
+        # return optimizer.apply_gradient(grad), log_p
+        updates, opt_params = self.optimizer.log_alpha.update(grad, opt_params)
+        return optix.apply_updates(actor, updates), opt_params, log_p
 
     @functools.partial(jax.jit, static_argnums=0)
     def alpha_step(self, params, opt_params, log_p, target_entropy):
@@ -330,12 +332,13 @@ class SAC:
         params = Params(**params)
         opt_params = OptParams(**opt_params)
 
-        self.flax_optimizer.actor, log_p = self.actor_step(
+        params.actor, opt_params.actor, log_p = self.actor_step(
             rng=next(self.rng),
-            optimizer=self.flax_optimizer.actor,
+            actor=params.actor,
             critic=self.flax_optimizer.critic,
             state=state,
             log_alpha=params.log_alpha,
+            opt_params=opt_params.actor,
         )
 
         if self.entropy_tune:
@@ -351,12 +354,14 @@ class SAC:
         )
         return vars(params), vars(opt_params)
 
-    def select_action(self, state):
-        mu, _ = apply_model(self.flax_optimizer.actor.target, state)
+    def select_action(self, params, obs):
+        # mu, _ = apply_model(self.flax_optimizer.actor.target, state)
+        mu, log_sig = self.net.actor.apply(params, obs)
         return mu.flatten()
 
-    def sample_action(self, rng, state):
-        mu, log_sig = apply_model(self.flax_optimizer.actor.target, state)
+    def sample_action(self, rng, params, obs):
+        # mu, log_sig = apply_model(self.flax_optimizer.actor.target, state)
+        mu, log_sig = self.net.actor.apply(params, obs)
         return mu + random.normal(rng, mu.shape) * jnp.exp(log_sig)
 
     def train(self, replay_buffer, batch_size=100, load_path=None):

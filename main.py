@@ -76,7 +76,7 @@ class Trainer:
                 while not eval_time_step.last():
                     if render:
                         eval_env.render()
-                    action = policy.select_action(eval_time_step.observation)
+                    action = policy.select_action(params, eval_time_step.observation)
                     eval_time_step = eval_env.step(action)
                     avg_reward += eval_time_step.reward
 
@@ -126,7 +126,9 @@ class Trainer:
             if t < self.start_time_steps:
                 action = self.env.action_space.sample()
             else:
-                action = self.policy.sample_action(next(self.rng), obs).squeeze(0)
+                action = self.policy.sample_action(next(self.rng), params, obs).squeeze(
+                    0
+                )
                 action = action.clip(-max_action, max_action)
             obs, params = iterator.send(action)
 
