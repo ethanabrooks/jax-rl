@@ -198,7 +198,7 @@ class SAC:
         target_Q1, target_Q2 = critic_target(next_obs, next_action)
         target_Q = (
             jnp.minimum(target_Q1, target_Q2)
-            - jnp.exp(self.flax_optimizer.log_alpha.target()) * next_log_p
+            - jnp.exp(self.net.log_alpha.apply(params.log_alpha)) * next_log_p
         )
         target_Q = reward + not_done * self.discount * target_Q
 
@@ -294,14 +294,17 @@ class SAC:
 
     @functools.partial(jax.jit, static_argnums=0)
     def actor_step(self, rng, optimizer, critic, state, log_alpha):
-        critic, log_alpha = critic.target, log_alpha.target
+        critic = critic.target
 
         def loss_fn(actor):
             actor_action, log_p = actor(state, sample=True, key=rng)
             q1, q2 = critic(state, actor_action)
             min_q = jnp.minimum(q1, q2)
             partial_loss_fn = jax.vmap(
-                partial(actor_loss_fn, jax.lax.stop_gradient(log_alpha()))
+                partial(
+                    actor_loss_fn,
+                    jax.lax.stop_gradient(self.net.log_alpha.apply(log_alpha)),
+                )
             )
             actor_loss = partial_loss_fn(log_p, min_q)
             return jnp.mean(actor_loss), log_p
@@ -310,17 +313,18 @@ class SAC:
         return optimizer.apply_gradient(grad), log_p
 
     @functools.partial(jax.jit, static_argnums=0)
-    def alpha_step(self, optimizer, log_p, target_entropy):
+    def alpha_step(self, params, opt_params, log_p, target_entropy):
         log_p = jax.lax.stop_gradient(log_p)
 
-        def loss_fn(log_alpha):
+        def loss_fn(params):
             partial_loss_fn = jax.vmap(
-                partial(alpha_loss_fn, log_alpha(), target_entropy)
+                partial(alpha_loss_fn, self.net.log_alpha.apply(params), target_entropy)
             )
             return jnp.mean(partial_loss_fn(log_p))
 
-        grad = jax.grad(loss_fn)(optimizer.target)
-        return optimizer.apply_gradient(grad)
+        grad = jax.grad(loss_fn)(params)
+        updates, opt_params = self.optimizer.log_alpha.update(grad, opt_params)
+        return optix.apply_updates(params, updates), opt_params
 
     def update_actor(self, params, opt_params, state):
         self.flax_optimizer.actor, log_p = self.actor_step(
@@ -328,12 +332,13 @@ class SAC:
             optimizer=self.flax_optimizer.actor,
             critic=self.flax_optimizer.critic,
             state=state,
-            log_alpha=self.flax_optimizer.log_alpha,
+            log_alpha=params,
         )
 
         if self.entropy_tune:
-            self.flax_optimizer.log_alpha = self.alpha_step(
-                optimizer=self.flax_optimizer.log_alpha,
+            params, opt_params = self.alpha_step(
+                params=params,
+                opt_params=opt_params,
                 log_p=log_p,
                 target_entropy=self.target_entropy,
             )
