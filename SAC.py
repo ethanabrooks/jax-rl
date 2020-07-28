@@ -256,11 +256,26 @@ class SAC:
 
     # @functools.partial(jax.jit, static_argnums=0)
     def update_critic(
-        self, params: dict, opt_params: dict, **kwargs,
+        self, params: dict, opt_params: dict, obs, action, **kwargs,
     ):
-
-        self.flax_optimizer.critic = self._update_critic(params=params, **kwargs)
         params = Params(**params)
+
+        target_Q = jax.lax.stop_gradient(
+            self.get_td_target(
+                rng=next(self.rng),
+                **kwargs,
+                critic_target=self.critic_target,
+                params=params,
+            )
+        )
+
+        self.flax_optimizer.critic = self.critic_step(
+            optimizer=self.flax_optimizer.critic,
+            state=obs,
+            action=action,
+            target_Q=target_Q,
+        )
+
         opt_params = OptParams(**opt_params)
 
         # grad = jax.grad(self.critic_loss)(
@@ -274,23 +289,6 @@ class SAC:
         # )
         #
         return vars(params), vars(opt_params)
-
-    def _update_critic(self, params, action, obs, **kwargs):
-        params = Params(**params)
-
-        target_Q = jax.lax.stop_gradient(
-            self.get_td_target(
-                rng=next(self.rng),
-                **kwargs,
-                critic_target=self.critic_target,
-                params=params,
-            )
-        )
-
-        grad = jax.grad(self.critic_loss)(
-            self.flax_optimizer.critic.target, obs, action, target_Q
-        )
-        return self.flax_optimizer.critic.apply_gradient(grad)
 
     @functools.partial(jax.jit, static_argnums=0)
     def actor_step(self, rng, actor, critic, state, log_alpha, opt_params):
@@ -313,6 +311,16 @@ class SAC:
         # return optimizer.apply_gradient(grad), log_p
         updates, opt_params = self.optimizer.log_alpha.update(grad, opt_params)
         return optix.apply_updates(actor, updates), opt_params, log_p
+
+    @functools.partial(jax.jit, static_argnums=0)
+    def critic_step(self, optimizer, state, action, target_Q):
+        def loss_fn(critic):
+            current_Q1, current_Q2 = critic(state, action)
+            critic_loss = double_mse(current_Q1, current_Q2, target_Q)
+            return jnp.mean(critic_loss)
+
+        grad = jax.grad(loss_fn)(optimizer.target)
+        return optimizer.apply_gradient(grad)
 
     @functools.partial(jax.jit, static_argnums=0)
     def alpha_step(self, params, opt_params, log_p, target_entropy):
