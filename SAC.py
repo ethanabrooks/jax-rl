@@ -226,7 +226,6 @@ class SAC:
     def flax_get_td_target(
         self,
         critic_target,
-        discount,
         rng: PRNGKey,
         params: Params,
         next_obs: jnp.ndarray,
@@ -242,7 +241,7 @@ class SAC:
             jnp.minimum(target_Q1, target_Q2)
             - jnp.exp(self.flax_optimizer.log_alpha.target()) * next_log_p
         )
-        target_Q = reward + not_done * discount * target_Q
+        target_Q = reward + not_done * self.discount * target_Q
 
         return target_Q
 
@@ -345,7 +344,6 @@ class SAC:
                 next_obs=next_obs,
                 reward=reward,
                 not_done=not_done,
-                discount=self.discount,
                 critic_target=critic_target,
                 params=params,
             )
