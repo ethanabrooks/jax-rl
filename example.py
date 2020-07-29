@@ -46,11 +46,11 @@ def main():
     _, params = partial.init_by_shape(next(rng), shape)
     net = nn.Model(partial, params)
 
-    optimizer = adam.create(net)
+    optimizer = jax.device_put(adam.create(net))
     print(optimizer.target)
     _, params = partial.init_by_shape(next(rng), shape)
     net = net.replace(params=params)
-    optimizer = adam.create(net)
+    optimizer = jax.device_put(adam.create(net))
     print(optimizer.target)
 
 
