@@ -39,7 +39,7 @@ double = dict(
 )
 
 double_search = dict(
-    max_time_steps=big_values(3, 5),
+    max_time_steps=hp.choice("max_time_steps", big_values(3, 5)),
     **search,
     **{"outer_" + k: v for k, v in search.items()}
 )
