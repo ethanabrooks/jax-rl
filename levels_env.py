@@ -23,7 +23,7 @@ class Env(gym.Env):
     def generator(self):
         action = None
         for i in range(self.n):
-            r = i + 2
+            yield (i, i), i, False, {}
             for j in range(i):
 
                 def render():
@@ -32,9 +32,7 @@ class Env(gym.Env):
                 self._render = render
                 action = yield (i, j), -1, False, {}
                 if action < 1:
-                    yield (i, j), r, True, {}
-
-            yield (i, i), r, False, {}
+                    yield (i, j), i, True, {}
 
     def render(self, mode="human", pause=True):
         self._render()

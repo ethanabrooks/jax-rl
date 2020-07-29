@@ -1,5 +1,3 @@
-from ray import tune
-import numpy as np
 from hyperopt import hp
 
 
@@ -19,6 +17,4 @@ search = dict(
     seed=hp.randint("seed", 20),
 )
 
-deterministic = dict(
-    batch_size=128, learning_rate=0.01, actor_freq=1, seed=5, tau=0.005
-)
+pendulum = dict(batch_size=128, learning_rate=0.01, actor_freq=1, seed=5, tau=0.005)
