@@ -1,8 +1,10 @@
 from flax import nn
 import jax
+from haiku._src.typing import PRNGKey
 from jax import random
 import jax.numpy as jnp
 import numpy as onp
+from typing import List, Tuple
 
 from utils import gaussian_likelihood
 
@@ -124,6 +126,11 @@ def build_td3_critic_model(input_shapes, init_rng):
     _, init_params = critic.init_by_shape(init_rng, input_shapes)
 
     return nn.Model(critic, init_params)
+
+
+def build_model(module: nn.Module, key: PRNGKey, input_shapes):
+    _, init_params = module.init_by_shape(key, input_shapes)
+    return nn.Model(module, init_params)
 
 
 def build_double_critic_model(input_shapes, init_rng):

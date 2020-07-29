@@ -1,20 +1,20 @@
-import itertools
 from dataclasses import dataclass
 from functools import partial
 from typing import Union
 
+import flax.nn as nn
 import jax
 import jax.numpy as jnp
 from flax import optim
+from flax.optim import Adam, Optimizer
 from haiku import PRNGSequence
 from jax import random
 
 from models import (
-    build_gaussian_policy_model,
-    build_double_critic_model,
-    build_constant_model,
+    GaussianPolicy,
+    DoubleCritic,
+    Constant,
 )
-from saving import save_model, load_model
 from utils import double_mse, apply_model, copy_params
 
 
@@ -24,6 +24,23 @@ class Optimizers:
     actor: T
     critic: T
     log_alpha: T
+
+
+@dataclass
+class Models:
+    T = nn.Model
+    actor: T
+    critic: T
+    target_critic: T
+    alpha: T
+
+
+@dataclass
+class Modules:
+    T = nn.Module
+    actor: T
+    critic: T
+    alpha: T
 
 
 def actor_loss_fn(log_alpha, log_p, min_q):
@@ -36,21 +53,11 @@ def alpha_loss_fn(log_alpha, target_entropy, log_p):
 
 @jax.jit
 def get_td_target(
-    rng,
-    state,
-    action,
-    next_state,
-    reward,
-    not_done,
-    discount,
-    max_action,
-    actor,
-    critic_target,
-    log_alpha,
+    rng, next_obs, reward, not_done, discount, actor, critic_target, log_alpha,
 ):
-    next_action, next_log_p = actor(next_state, sample=True, key=rng)
+    next_action, next_log_p = actor(next_obs, sample=True, key=rng)
 
-    target_Q1, target_Q2 = critic_target(next_state, next_action)
+    target_Q1, target_Q2 = critic_target(next_obs, next_action)
     target_Q = jnp.minimum(target_Q1, target_Q2) - jnp.exp(log_alpha()) * next_log_p
     target_Q = reward + not_done * discount * target_Q
 
@@ -116,26 +123,25 @@ class SAC:
         self.rng = PRNGSequence(seed)
 
         actor_input_dim = [((1, *state_shape), jnp.float32)]
-
-        self.actor = build_gaussian_policy_model(
-            actor_input_dim, action_dim, max_action, next(self.rng)
-        )
-
-        init_rng = next(self.rng)
-
-        self.critic_input_dim = [
+        critic_input_dim = self.critic_input_dim = [
             ((1, *state_shape), jnp.float32),
             ((1, action_dim), jnp.float32),
         ]
-        self.critic = build_double_critic_model(self.critic_input_dim, init_rng)
+        self.actor = None
+        self.critic = None
+        self.log_alpha = None
         self.entropy_tune = entropy_tune
-        self.log_alpha = build_constant_model(-3.5, next(self.rng))
         self.target_entropy = -action_dim
 
         self.adam = Optimizers(
             actor=optim.Adam(learning_rate=lr),
             critic=optim.Adam(learning_rate=lr),
             log_alpha=optim.Adam(learning_rate=lr),
+        )
+        self.module = Modules(
+            actor=GaussianPolicy.partial(action_dim=action_dim, max_action=max_action),
+            critic=DoubleCritic.partial(),
+            alpha=Constant.partial(start_value=-3.5),
         )
         self.optimizer = None
 
@@ -146,78 +152,114 @@ class SAC:
         self.save_freq = save_freq
 
         self.total_it = 0
-        self.iterator = self.generator()
-        next(self.iterator)
+        self.model = None
 
-    def generator(self, load_path=None):
-        critic_target = build_double_critic_model(self.critic_input_dim, next(self.rng))
-        self.optimizer = Optimizers(
-            actor=(self.adam.actor.create(self.actor)),
-            critic=(self.adam.critic.create(self.critic)),
-            log_alpha=(self.adam.log_alpha.create(self.log_alpha)),
+        def new_params(module: nn.Module, shape=None):
+            _, params = (
+                module.init(next(self.rng))
+                if shape is None
+                else module.init_by_shape(next(self.rng), shape)
+            )
+            return params
+
+        def new_model(module: nn.Module, shape=None) -> nn.Model:
+            return nn.Model(module, new_params(module, shape))
+
+        def update_model(model: nn.Model, shape=None) -> nn.Model:
+            return model.replace(params=new_params(model.module, shape))
+
+        def reset_models() -> Models:
+            if self.model is None:
+                critic = new_model(self.module.critic, critic_input_dim)
+                return Models(
+                    actor=new_model(self.module.actor, actor_input_dim),
+                    critic=critic,
+                    target_critic=critic.replace(params=critic.params),
+                    alpha=new_model(self.module.alpha),
+                )
+            else:
+                critic = update_model(self.model.critic, critic_input_dim)
+                return Models(
+                    actor=update_model(self.model.actor, actor_input_dim),
+                    critic=critic,
+                    target_critic=critic.replace(params=critic.params),
+                    alpha=update_model(self.model.alpha),
+                )
+
+        self.reset_models = reset_models
+
+        def reset_optimizer(adam: Adam, model: nn.Model) -> Optimizer:
+            return jax.device_put(adam.create(model))
+
+        def reset_optimizers() -> Optimizers:
+            return Optimizers(
+                actor=reset_optimizer(self.adam.actor, self.model.actor),
+                critic=reset_optimizer(self.adam.critic, self.model.critic),
+                log_alpha=reset_optimizer(self.adam.log_alpha, self.model.alpha),
+            )
+
+        self.reset_optimizers = reset_optimizers
+        self.i = 0
+
+    def init(self):
+        self.model = self.reset_models()
+        self.optimizer = self.reset_optimizers()
+        self.i = 0
+        # if load_path:
+        #     self.optimizer = Optimizers(
+        #         actor=load_model(load_path + "_actor", self.optimizer.actor),
+        #         critic=load_model(load_path + "_critic", self.optimizer.critic),
+        #         log_alpha=load_model(
+        #             load_path + "_log_alpha", self.optimizer.log_alpha
+        #         ),
+        #     )
+        #     critic_target = critic_target.replace(
+        #         params=self.optimizer.critic.target.params
+        #     )
+
+    def update(self, obs, action, **kwargs):
+        self.i += 1
+        target_Q = jax.lax.stop_gradient(
+            get_td_target(
+                next(self.rng),
+                **kwargs,
+                discount=self.discount,
+                actor=self.optimizer.actor.target,
+                critic_target=(self.model.target_critic),
+                log_alpha=self.optimizer.log_alpha.target
+            )
         )
-        if load_path:
-            self.optimizer = Optimizers(
-                actor=load_model(load_path + "_actor", self.optimizer.actor),
-                critic=load_model(load_path + "_critic", self.optimizer.critic),
-                log_alpha=load_model(
-                    load_path + "_log_alpha", self.optimizer.log_alpha
-                ),
-            )
-            critic_target = critic_target.replace(
-                params=self.optimizer.critic.target.params
-            )
 
-        self.optimizer.actor = jax.device_put(self.optimizer.actor)
-        self.optimizer.critic = jax.device_put(self.optimizer.critic)
-        self.optimizer.log_alpha = jax.device_put(self.optimizer.log_alpha)
+        self.optimizer.critic = critic_step(
+            optimizer=self.optimizer.critic,
+            state=obs,
+            action=action,
+            target_Q=target_Q,
+        )
 
-        for i in itertools.count():
-
-            state, action, _, _, _ = training_data = yield
-
-            target_Q = jax.lax.stop_gradient(
-                get_td_target(
-                    next(self.rng),
-                    *training_data,
-                    discount=self.discount,
-                    max_action=self.max_action,
-                    actor=self.optimizer.actor.target,
-                    critic_target=critic_target,
-                    log_alpha=self.optimizer.log_alpha.target
-                )
+        if self.i % self.policy_freq == 0:
+            self.optimizer.actor, log_p = actor_step(
+                rng=next(self.rng),
+                optimizer=self.optimizer.actor,
+                critic=self.optimizer.critic,
+                state=obs,
+                log_alpha=self.optimizer.log_alpha,
             )
 
-            self.optimizer.critic = critic_step(
-                optimizer=self.optimizer.critic,
-                state=state,
-                action=action,
-                target_Q=target_Q,
-            )
-
-            if i % self.policy_freq == 0:
-                self.optimizer.actor, log_p = actor_step(
-                    rng=next(self.rng),
-                    optimizer=self.optimizer.actor,
-                    critic=self.optimizer.critic,
-                    state=state,
-                    log_alpha=self.optimizer.log_alpha,
+            if self.entropy_tune:
+                self.optimizer.log_alpha = alpha_step(
+                    optimizer=self.optimizer.log_alpha,
+                    log_p=log_p,
+                    target_entropy=self.target_entropy,
                 )
 
-                if self.entropy_tune:
-                    self.optimizer.log_alpha = alpha_step(
-                        optimizer=self.optimizer.log_alpha,
-                        log_p=log_p,
-                        target_entropy=self.target_entropy,
-                    )
-
-                critic_target = copy_params(
-                    self.optimizer.critic.target, critic_target, self.tau
-                )
-            if load_path and i % self.save_freq == 0:
-                save_model(load_path + "_critic", self.optimizer.critic)
-                save_model(load_path + "_actor", self.optimizer.actor)
-                save_model(load_path + "_log_alpha", self.optimizer.log_alpha)
+            self.model.target_critic = copy_params(
+                self.optimizer.critic.target, self.model.target_critic, self.tau
+            )
+        # if load_path and i % self.save_freq == 0:
+        #     save_model(load_path + "_critic", self.optimizer.critic)
+        #     save_model(load_path + "_actor", self.optimizer.actor)
+        #     save_model(load_path + "_log_alpha", self.optimizer.log_alpha)
 
     def select_action(self, state):
         mu, _ = apply_model(self.optimizer.actor.target, state)
@@ -226,11 +268,3 @@ class SAC:
     def sample_action(self, rng, state):
         mu, log_sig = apply_model(self.optimizer.actor.target, state)
         return mu + random.normal(rng, mu.shape) * jnp.exp(log_sig)
-
-    def train(self, replay_buffer, batch_size=100, load_path=None):
-        if self.iterator is None:
-            self.iterator = self.generator(load_path=load_path)
-            next(self.iterator)
-
-        data = replay_buffer.sample(next(self.rng), batch_size)
-        return self.iterator.send(data)

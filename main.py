@@ -138,6 +138,7 @@ class Trainer:
             pprint(kwargs)
 
     def generator(self):
+        self.policy.init()
         time_step = self.env.reset()
         episode_reward = 0
         episode_time_steps = 0
@@ -173,7 +174,8 @@ class Trainer:
             # Train agent after collecting sufficient data
             if t >= self.start_time_steps:
                 for _ in range(self.train_steps):
-                    self.policy.train(replay_buffer, self.batch_size)
+                    data = replay_buffer.sample(next(self.rng), self.batch_size)
+                    self.policy.update(**vars(data))
 
             if time_step.last():
                 # +1 to account for 0 indexing. +0 on ep_time_steps since it will increment +1 even if done=True

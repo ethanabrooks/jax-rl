@@ -44,13 +44,13 @@ def main():
     adam = optim.Adam(learning_rate=0.1)
     partial = Net.partial()
     _, params = partial.init_by_shape(next(rng), shape)
-    net = nn.Model(partial, params)
+    model = nn.Model(partial, params)
 
-    optimizer = jax.device_put(adam.create(net))
+    optimizer = jax.device_put(adam.create(model))
     print(optimizer.target)
-    _, params = partial.init_by_shape(next(rng), shape)
-    net = net.replace(params=params)
-    optimizer = jax.device_put(adam.create(net))
+    _, params = model.module.init_by_shape(next(rng), shape)
+    model = model.replace(params=params)
+    optimizer = jax.device_put(adam.create(model))
     print(optimizer.target)
 
 
