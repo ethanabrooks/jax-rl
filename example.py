@@ -40,20 +40,15 @@ def main():
     # pass "dummy" inputs (e.g. ones of the same shape and dtype) since initialization
     # is not usually data dependent.
     shape = [([1000], float)]
-
     adam = optim.Adam(learning_rate=0.1)
     partial = Net.partial()
     _, params = partial.init_by_shape(next(rng), shape)
     net = nn.Model(partial, params)
 
     optimizer = jax.device_put(adam.create(net))
-    print(optimizer.target)
-    input("waiting")
-    _, params = partial.init_by_shape(next(rng), shape)
+    _, params = partial.init_by_shape(next(rng), shape)  # HERE
     net = net.replace(params=params)
-    optimizer = jax.device_put(adam.create(net))
-    print(optimizer.target)
-    input("waiting")
+    optimizer = jax.device_put(adam.create(net))  # HERE
 
 
 if __name__ == "__main__":

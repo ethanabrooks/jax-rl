@@ -23,10 +23,6 @@ from utils import ReplayBuffer
 # A fixed seed is used for the eval environment
 
 
-def train(kwargs, use_tune):
-    Trainer(**kwargs, use_tune=use_tune).train()
-
-
 class Trainer:
     def __init__(
         self,
@@ -48,6 +44,7 @@ class Trainer:
         train_steps,
         render,
         use_tune,
+        env=None,
     ):
         seed = int(seed)
         policy = "SAC"
@@ -63,7 +60,9 @@ class Trainer:
         self.eval_freq = eval_freq
 
         def make_env():
-            return Environment.wrap(gym.make(env_id) if env_id else Env(1000))
+            if env is None:
+                return Environment.wrap(gym.make(env_id) if env_id else Env(1000))
+            return env
 
         def eval_policy():
             eval_env = make_env()
@@ -113,6 +112,41 @@ class Trainer:
             tau=tau,
         )
         self.rng = PRNGSequence(self.seed)
+
+    @classmethod
+    def run(cls, config):
+        cls(**config).train()
+
+    @classmethod
+    def main(cls, config, use_tune, num_samples, local_mode, env, name, **kwargs):
+        config = getattr(configs, config)
+        config.update(env_id=env)
+        for k, v in kwargs.items():
+            if k not in config:
+                config[k] = v
+        if use_tune:
+            ray.init(webui_host="127.0.0.1", local_mode=local_mode)
+            metric = "reward"
+            if local_mode:
+                tune.run(
+                    cls.run,
+                    name=name,
+                    config=config,
+                    resources_per_trial={"gpu": 1, "cpu": 2},
+                )
+            else:
+                tune.run(
+                    cls.run,
+                    config=config,
+                    name=name,
+                    resources_per_trial={"gpu": 1, "cpu": 2},
+                    # scheduler=ASHAScheduler(metric=metric, mode="max"),
+                    search_alg=HyperOptSearch(config, metric=metric, mode="max"),
+                    num_samples=num_samples,
+                )
+        else:
+            config.update(use_tune=False)
+            cls.run(config)
 
     def train(self):
         iterator = self.generator()
@@ -193,36 +227,6 @@ class Trainer:
                 episode_num += 1
 
 
-def main(config, use_tune, num_samples, local_mode, env, name, **kwargs):
-    config = getattr(configs, config)
-    config.update(env_id=env)
-    for k, v in kwargs.items():
-        if k not in config:
-            config[k] = v
-    if use_tune:
-        ray.init(webui_host="127.0.0.1", local_mode=local_mode)
-        metric = "reward"
-        if local_mode:
-            tune.run(
-                train,
-                name=name,
-                config=config,
-                resources_per_trial={"gpu": 1, "cpu": 2},
-            )
-        else:
-            tune.run(
-                train,
-                config=config,
-                name=name,
-                resources_per_trial={"gpu": 1, "cpu": 2},
-                # scheduler=ASHAScheduler(metric=metric, mode="max"),
-                search_alg=HyperOptSearch(config, metric=metric, mode="max"),
-                num_samples=num_samples,
-            )
-    else:
-        train(config, use_tune=use_tune)
-
-
 if __name__ == "__main__":
     PARSER = argparse.ArgumentParser()
     PARSER.add_argument("config")
@@ -231,4 +235,4 @@ if __name__ == "__main__":
     PARSER.add_argument("--num-samples", type=int)
     PARSER.add_argument("--name")
     add_arguments(PARSER)
-    main(**vars(PARSER.parse_args()))
+    Trainer.main(**vars(PARSER.parse_args()))
