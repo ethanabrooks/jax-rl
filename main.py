@@ -13,6 +13,7 @@ from tqdm import tqdm
 
 import SAC
 import configs
+from arguments import add_arguments
 from envs import Environment
 from levels_env import Env
 from utils import ReplayBuffer
@@ -29,34 +30,34 @@ def train(kwargs, use_tune):
 class Trainer:
     def __init__(
         self,
-        batch_size=256,
-        buffer_size=int(2e6),
-        discount=0.99,
-        env_id=None,
-        eval_freq=5e3,
-        eval_episodes=10,
-        learning_rate=3e-4,
-        load_path=None,
-        max_time_steps=None,
-        policy_freq=2,
-        save_freq=int(5e3),
-        save_model=True,
-        seed=0,
-        start_time_steps=int(1e4),
-        tau=0.005,
-        train_steps=1,
-        render=False,
-        use_tune=True,
+        batch_size,
+        buffer_size,
+        discount,
+        env_id,
+        eval_freq,
+        eval_episodes,
+        learning_rate,
+        load_path,
+        max_time_steps,
+        actor_freq,
+        save_freq,
+        save_model,
+        seed,
+        start_time_steps,
+        tau,
+        train_steps,
+        render,
+        use_tune,
     ):
         seed = int(seed)
         policy = "SAC"
         self.use_tune = use_tune
         self.seed = seed
-        self.max_time_steps = max_time_steps
-        self.start_time_steps = start_time_steps
-        self.train_steps = train_steps
-        self.batch_size = batch_size
-        self.buffer_size = buffer_size
+        self.max_time_steps = int(max_time_steps) if max_time_steps else None
+        self.start_time_steps = int(start_time_steps)
+        self.train_steps = int(train_steps)
+        self.batch_size = int(batch_size)
+        self.buffer_size = int(buffer_size)
         self.eval_freq = eval_freq
 
         def make_env():
@@ -108,7 +109,7 @@ class Trainer:
             save_freq=save_freq,
             discount=discount,
             lr=learning_rate,
-            policy_freq=policy_freq,
+            actor_freq=actor_freq,
             tau=tau,
         )
         self.rng = PRNGSequence(self.seed)
@@ -192,18 +193,27 @@ class Trainer:
                 episode_num += 1
 
 
-def main(config, use_tune, num_samples, local_mode, env, load_path):
+def main(config, use_tune, num_samples, local_mode, env, name, **kwargs):
     config = getattr(configs, config)
-    config.update(env_id=env, load_path=load_path)
+    config.update(env_id=env)
+    for k, v in kwargs.items():
+        if k not in config:
+            config[k] = v
     if use_tune:
         ray.init(webui_host="127.0.0.1", local_mode=local_mode)
         metric = "reward"
         if local_mode:
-            tune.run(train, config=config)
+            tune.run(
+                train,
+                name=name,
+                config=config,
+                resources_per_trial={"gpu": 1, "cpu": 2},
+            )
         else:
             tune.run(
                 train,
                 config=config,
+                name=name,
                 resources_per_trial={"gpu": 1, "cpu": 2},
                 # scheduler=ASHAScheduler(metric=metric, mode="max"),
                 search_alg=HyperOptSearch(config, metric=metric, mode="max"),
@@ -219,6 +229,6 @@ if __name__ == "__main__":
     PARSER.add_argument("--no-tune", dest="use_tune", action="store_false")
     PARSER.add_argument("--local-mode", action="store_true")
     PARSER.add_argument("--num-samples", type=int)
-    PARSER.add_argument("--env")
-    PARSER.add_argument("--load-path")
+    PARSER.add_argument("--name")
+    add_arguments(PARSER)
     main(**vars(PARSER.parse_args()))

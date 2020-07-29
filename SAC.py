@@ -114,7 +114,7 @@ class SAC:
         save_freq,
         discount=0.99,
         tau=0.005,
-        policy_freq=2,
+        actor_freq=2,
         lr=3e-4,
         entropy_tune=True,
         seed=0,
@@ -148,7 +148,7 @@ class SAC:
         self.max_action = max_action
         self.discount = discount
         self.tau = tau
-        self.policy_freq = policy_freq
+        self.policy_freq = actor_freq
         self.save_freq = save_freq
 
         self.total_it = 0
