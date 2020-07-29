@@ -26,7 +26,7 @@ def loss_fn(images, labels):
 
 class Net(nn.Module):
     def apply(self, x):
-        return nn.Dense(x, features=200)
+        return nn.Dense(x, features=2000)
 
 
 @profile
@@ -39,19 +39,21 @@ def main():
     # `init` runs your function, as such we need an example input. Typically you can
     # pass "dummy" inputs (e.g. ones of the same shape and dtype) since initialization
     # is not usually data dependent.
-    shape = [([100], float)]
+    shape = [([1000], float)]
 
     adam = optim.Adam(learning_rate=0.1)
     partial = Net.partial()
     _, params = partial.init_by_shape(next(rng), shape)
-    model = nn.Model(partial, params)
+    net = nn.Model(partial, params)
 
-    optimizer = jax.device_put(adam.create(model))
+    optimizer = jax.device_put(adam.create(net))
     print(optimizer.target)
-    _, params = model.module.init_by_shape(next(rng), shape)
-    model = model.replace(params=params)
-    optimizer = jax.device_put(adam.create(model))
+    input("waiting")
+    _, params = partial.init_by_shape(next(rng), shape)
+    net = net.replace(params=params)
+    optimizer = jax.device_put(adam.create(net))
     print(optimizer.target)
+    input("waiting")
 
 
 if __name__ == "__main__":
