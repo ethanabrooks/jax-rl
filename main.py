@@ -51,6 +51,8 @@ class Trainer:
     ):
         seed = int(seed)
         policy = "SAC"
+        if env_id == "levels":
+            env_id = None
         self.use_tune = use_tune
         self.seed = seed
         self.max_time_steps = int(max_time_steps) if max_time_steps else None
@@ -87,10 +89,8 @@ class Trainer:
 
         self.eval_policy = eval_policy
 
-        env_name = env_id or "levels"
-        file_name = f"{policy}_{env_name}_{seed}"
         self.report(policy=policy)
-        self.report(env=env_name)
+        self.report(env=env_id)
         self.report(seed=seed)
         if save_model and not os.path.exists("./models"):
             os.makedirs("./models")
