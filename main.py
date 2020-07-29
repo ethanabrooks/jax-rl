@@ -127,16 +127,21 @@ class Trainer:
         if use_tune:
             ray.init(webui_host="127.0.0.1", local_mode=local_mode)
             metric = "reward"
+            config.update(use_tune=True)
+
+            def run(kwargs):
+                return cls.run(kwargs)
+
             if local_mode:
                 tune.run(
-                    cls.run,
+                    run,
                     name=name,
                     config=config,
                     resources_per_trial={"gpu": 1, "cpu": 2},
                 )
             else:
                 tune.run(
-                    cls.run,
+                    run,
                     config=config,
                     name=name,
                     resources_per_trial={"gpu": 1, "cpu": 2},
