@@ -10,11 +10,13 @@ def big_values(start, stop):
 
 
 search = dict(
-    learning_rate=hp.choice("learning_rate", small_values(2, 5)),
-    batch_size=hp.choice("batch_size", big_values(6, 10)),
     actor_freq=hp.choice("actor_freq", [1, 2, 3]),
-    tau=hp.choice("tau", small_values(2, 5)),
+    batch_size=hp.choice("batch_size", big_values(6, 10)),
+    learning_rate=hp.choice("learning_rate", small_values(2, 5)),
     seed=hp.randint("seed", 20),
+    start_time_steps=hp.choice("start_time_steps", big_values(3, 6)),
+    tau=hp.choice("tau", small_values(2, 5)),
+    train_steps=hp.choice("train_steps", [1, 2, 3]),
 )
 
 pendulum = dict(batch_size=128, learning_rate=0.01, actor_freq=1, seed=5, tau=0.005)
@@ -33,14 +35,18 @@ double = dict(
 )
 
 double_search = dict(
-    outer_learning_rate=hp.choice("learning_rate", small_values(2, 5)),
-    outer_batch_size=hp.choice("batch_size", big_values(6, 10)),
     outer_actor_freq=hp.choice("actor_freq", [1, 2, 3]),
-    outer_tau=hp.choice("tau", small_values(2, 5)),
+    outer_batch_size=hp.choice("batch_size", big_values(6, 10)),
+    outer_learning_rate=hp.choice("learning_rate", small_values(2, 5)),
     outer_seed=hp.randint("seed", 20),
-    learning_rate=hp.choice("learning_rate", small_values(2, 5)),
-    batch_size=hp.choice("batch_size", big_values(6, 10)),
+    outer_start_time_steps=hp.choice("start_time_steps", big_values(3, 6)),
+    outer_tau=hp.choice("tau", small_values(2, 5)),
+    outer_train_steps=hp.choice("train_steps", [1, 2, 3]),
     actor_freq=hp.choice("actor_freq", [1, 2, 3]),
-    tau=hp.choice("tau", small_values(2, 5)),
+    batch_size=hp.choice("batch_size", big_values(6, 10)),
+    learning_rate=hp.choice("learning_rate", small_values(2, 5)),
     seed=hp.randint("seed", 20),
+    start_time_steps=hp.choice("start_time_steps", big_values(3, 6)),
+    tau=hp.choice("tau", small_values(2, 5)),
+    train_steps=hp.choice("train_steps", [1, 2, 3]),
 )
