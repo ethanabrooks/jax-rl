@@ -112,7 +112,7 @@ class Trainer:
             actor_freq=actor_freq,
             tau=tau,
         )
-        self.rng = PRNGSequence(self.seed)
+        self.rng = PRNGSequence(seed)
 
     @classmethod
     def run(cls, config):
