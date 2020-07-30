@@ -18,7 +18,7 @@ search = dict(
     batch_size=hp.choice("batch_size", medium_values(6, 10)),
     learning_rate=hp.choice("learning_rate", small_values(2, 5)),
     seed=hp.randint("seed", 20),
-    start_time_steps=hp.choice("start_time_steps", big_values(3, 5)),
+    start_time_steps=hp.choice("start_time_steps", big_values(3, 4)),
     tau=hp.choice("tau", small_values(2, 5)),
     train_steps=hp.choice("train_steps", [1, 2, 3]),
 )
@@ -36,6 +36,8 @@ double = dict(
     actor_freq=1,
     seed=5,
     tau=0.005,
+    start_time_steps=0,
+    outer_start_time_steps=1,
 )
 
 double_search = dict(

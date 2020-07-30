@@ -13,6 +13,8 @@ class Environment(dm_env.Environment, gym.Wrapper):
             return ContinuousActionEnvironment(env)
         elif isinstance(env.action_space, gym.spaces.Discrete):
             return DiscreteActionEnvironment(env)
+        else:
+            raise RuntimeError
 
     def reset(self):
         reset = self.env.reset()

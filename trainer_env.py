@@ -8,6 +8,8 @@ class TrainerEnv(gym.Env, Trainer):
         super().__init__(**kwargs)
         self.iterator = None
         self.t = None
+        self.observation_space = self.env.observation_space
+        self.action_space = self.env.action_space
 
     def step(self, action):
         s = self.iterator.send(action)
