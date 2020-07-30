@@ -46,7 +46,6 @@ class Trainer:
         use_tune,
         prefix=None,
         env=None,
-        sample_eval=False,
     ):
         self.prefix = prefix
         seed = int(seed)
@@ -60,7 +59,6 @@ class Trainer:
         self.batch_size = int(batch_size)
         self.buffer_size = int(buffer_size)
         self.eval_freq = eval_freq
-        self.rng = PRNGSequence(seed)
 
         def make_env():
             if env is None:
@@ -80,11 +78,7 @@ class Trainer:
                 while not eval_time_step.last():
                     if render:
                         eval_env.render()
-                    action = (
-                        policy.sample_action(next(self.rng), eval_time_step.observation)
-                        if sample_eval
-                        else policy.select_action(eval_time_step.observation)
-                    )
+                    action = policy.select_action(eval_time_step.observation)
                     eval_time_step = eval_env.step(action)
                     avg_reward += eval_time_step.reward
 
@@ -118,6 +112,7 @@ class Trainer:
             actor_freq=actor_freq,
             tau=tau,
         )
+        self.rng = PRNGSequence(seed)
 
     @classmethod
     def run(cls, config):

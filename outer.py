@@ -32,7 +32,7 @@ class OuterTrainer(Trainer):
         )
         env_kwargs = dict(get_kwargs(lambda k: not outer.match(k)))
         env = Environment.wrap(TrainerEnv(**env_kwargs))
-        cls(**trainer_kwargs, env=env, sample_eval=True, prefix="outer").train()
+        cls(**trainer_kwargs, env=env, prefix="outer").train()
 
 
 def add_outer_arguments(parser):
