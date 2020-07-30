@@ -1,5 +1,6 @@
 import gym
 
+from haiku import PRNGSequence
 from main import Trainer
 
 
@@ -10,6 +11,9 @@ class TrainerEnv(gym.Env, Trainer):
         self.t = None
         self.observation_space = self.env.observation_space
         self.action_space = self.env.action_space
+
+    def seed(self, seed=None):
+        self.rng = PRNGSequence(seed)
 
     def step(self, action):
         s = self.iterator.send(action)

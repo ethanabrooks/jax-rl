@@ -51,7 +51,6 @@ class Trainer:
         if env_id == "levels":
             env_id = None
         self.use_tune = use_tune
-        self.seed = seed
         self.max_time_steps = int(max_time_steps) if max_time_steps else None
         self.start_time_steps = int(start_time_steps)
         self.train_steps = int(train_steps)
@@ -111,7 +110,7 @@ class Trainer:
             actor_freq=actor_freq,
             tau=tau,
         )
-        self.rng = PRNGSequence(self.seed)
+        self.rng = PRNGSequence(seed)
 
     @classmethod
     def run(cls, config):
