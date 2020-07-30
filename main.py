@@ -44,8 +44,10 @@ class Trainer:
         train_steps,
         render,
         use_tune,
+        prefix=None,
         env=None,
     ):
+        self.prefix = prefix
         seed = int(seed)
         policy = "SAC"
         if env_id == "levels":
@@ -171,6 +173,10 @@ class Trainer:
             state = iterator.send(action)
 
     def report(self, **kwargs):
+        kwargs = {
+            (k if self.prefix is None else (self.prefix + k)): v
+            for k, v in kwargs.items()
+        }
         if self.use_tune:
             tune.report(**kwargs)
         else:
