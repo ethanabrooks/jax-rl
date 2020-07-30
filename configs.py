@@ -29,6 +29,7 @@ double = dict(
     outer_batch_size=128,
     outer_learning_rate=0.01,
     outer_actor_freq=1,
+    outer_eval_freq=None,
     outer_seed=5,
     outer_tau=0.005,
     batch_size=128,
@@ -38,10 +39,12 @@ double = dict(
     tau=0.005,
     start_time_steps=0,
     outer_start_time_steps=1,
+    max_time_steps=10,
 )
 
 double_search = dict(
     max_time_steps=hp.choice("max_time_steps", big_values(3, 5)),
+    outer_eval_freq=None,
     **search,
     **{"outer_" + k: v for k, v in search.items()}
 )

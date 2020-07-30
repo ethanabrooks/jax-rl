@@ -33,6 +33,7 @@ class Env(gym.Env):
                 action = yield (i, j), -1, False, {}
                 if action < 1:
                     yield (i, j), i, True, {}
+        yield (self.n, 0), self.n, True, {}
 
     def render(self, mode="human", pause=True):
         self._render()

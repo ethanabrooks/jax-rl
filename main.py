@@ -62,7 +62,7 @@ class Trainer:
 
         def make_env():
             if env is None:
-                return Environment.wrap(gym.make(env_id) if env_id else Env(1000))
+                return Environment.wrap(gym.make(env_id) if env_id else Env(100))
             return env
 
         def eval_policy():
@@ -159,7 +159,7 @@ class Trainer:
         max_action = self.env.max_action()
         state = next(iterator)
         for t in itertools.count():
-            if t % self.eval_freq == 0:
+            if self.eval_freq is not None and t % self.eval_freq == 0:
                 self.eval_policy()
 
             if t < self.start_time_steps:

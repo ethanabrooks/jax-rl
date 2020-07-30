@@ -18,7 +18,7 @@ class TrainerEnv(gym.Env, Trainer):
     def step(self, action):
         s = self.iterator.send(action)
         self.t += 1
-        t = self.t == self.max_time_steps
+        t = self.t == self.max_time_steps - 1
         r = self.eval_policy() if t else 0
         return s, r, t, {}
 
