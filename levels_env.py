@@ -1,13 +1,14 @@
 import gym
 from gym.spaces import Box
 import numpy as np
+import numpy as np
 
 
 class Env(gym.Env):
     def __init__(self, n):
         self._render = None
         self.observation_space = Box(low=np.zeros(2), high=n * np.ones(2))
-        self.action_space = Box(low=np.zeros(1), high=2 * np.ones(1))
+        self.action_space = Box(low=np.zeros(1), high=np.ones(1))
         self.n = n
         self.iterator = None
 
@@ -31,7 +32,7 @@ class Env(gym.Env):
 
                 self._render = render
                 action = yield (i, j), -1, False, {}
-                if action < 1:
+                if np.random.random() < action:
                     yield (i, j), i, True, {}
         yield (self.n, 0), self.n, True, {}
 
