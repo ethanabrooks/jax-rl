@@ -9,3 +9,4 @@ export RUN_CONFIG_SCRIPT='config_script.py'
 export RUN_CONFIG_SCRIPT_INTERPRETER='python3'
 export RUN_CONFIG_SCRIPT_INTERPRETER_ARGS='-c'
 export DOCKER_RUN_COMMAND='docker run -d --rm --gpus all -it --label RUN'
+export RUN_KILL_LABEL="RUN"
