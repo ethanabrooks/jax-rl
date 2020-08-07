@@ -167,19 +167,8 @@ class SAC:
 
     def update(self, obs, action, **kwargs):
         self.i += 1
-        target_Q = jax.lax.stop_gradient(
-            self.get_td_target(
-                **kwargs,
-                actor=self.optimizer.actor.target,
-                critic_target=self.model.target_critic,
-            )
-        )
-
         self.optimizer.critic = self.critic_step(
-            optimizer=self.optimizer.critic,
-            state=obs,
-            action=action,
-            target_Q=target_Q,
+            optimizer=self.optimizer.critic, state=obs, action=action, **kwargs
         )
 
         if self.i % self.policy_freq == 0:
@@ -227,7 +216,15 @@ class SAC:
         return target_Q
 
     @functools.partial(jax.jit, static_argnums=0)
-    def critic_step(self, optimizer, state, action, target_Q):
+    def critic_step(self, optimizer, state, action, **kwargs):
+        target_Q = jax.lax.stop_gradient(
+            self.get_td_target(
+                **kwargs,
+                actor=self.optimizer.actor.target,
+                critic_target=self.model.target_critic,
+            )
+        )
+
         def loss_fn(critic):
             current_Q1, current_Q2 = critic(state, action)
             critic_loss = double_mse(current_Q1, current_Q2, target_Q)
