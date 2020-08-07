@@ -120,7 +120,7 @@ class Trainer:
 
     @classmethod
     def main(cls, config, use_tune, num_samples, local_mode, env, name, **kwargs):
-        config = getattr(configs, config)
+        config = configs.get_config(config)
         config.update(env_id=env)
         for k, v in kwargs.items():
             if k not in config:
