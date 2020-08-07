@@ -188,7 +188,6 @@ class SAC:
                 optimizer=self.optimizer.actor,
                 critic=self.optimizer.critic,
                 state=obs,
-                log_alpha=self.optimizer.log_alpha,
             )
 
             if self.entropy_tune:
@@ -238,8 +237,8 @@ class SAC:
         return optimizer.apply_gradient(grad)
 
     @functools.partial(jax.jit, static_argnums=0)
-    def actor_step(self, rng, optimizer, critic, state, log_alpha):
-        critic, log_alpha = critic.target, log_alpha.target
+    def actor_step(self, rng, optimizer, critic, state):
+        critic = critic.target
 
         def loss_fn(actor):
             mu, log_sig = actor(state, key=rng)
