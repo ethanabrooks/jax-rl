@@ -1,3 +1,4 @@
+import functools
 from dataclasses import dataclass
 from functools import partial
 from typing import Union
@@ -50,65 +51,6 @@ def actor_loss_fn(log_p, min_q):
 
 def alpha_loss_fn(log_alpha, target_entropy, log_p):
     return (log_alpha * (-log_p - target_entropy)).mean()
-
-
-@jax.jit
-def get_td_target(
-    rng, next_obs, reward, not_done, discount, actor, critic_target, log_alpha,
-):
-    mu, _ = actor(next_obs)
-    next_action = 2 * nn.tanh(mu)
-
-    target_Q1, target_Q2 = critic_target(next_obs, next_action)
-    target_Q = jnp.minimum(target_Q1, target_Q2)
-    target_Q = reward + not_done * discount * target_Q
-
-    return target_Q
-
-
-@jax.jit
-def critic_step(optimizer, state, action, target_Q):
-    def loss_fn(critic):
-        current_Q1, current_Q2 = critic(state, action)
-        critic_loss = double_mse(current_Q1, current_Q2, target_Q)
-        return jnp.mean(critic_loss)
-
-    grad = jax.grad(loss_fn)(optimizer.target)
-    return optimizer.apply_gradient(grad)
-
-
-@jax.jit
-def actor_step(rng, optimizer, critic, state, log_alpha):
-    critic, log_alpha = critic.target, log_alpha.target
-
-    def loss_fn(actor):
-        mu, log_sig = actor(state, key=rng)
-        pi = mu + random.normal(rng, mu.shape) * jnp.exp(log_sig)
-        log_p = gaussian_likelihood(pi, mu, log_sig)
-        pi = nn.tanh(pi)
-        log_p -= jnp.sum(jnp.log(nn.relu(1 - pi ** 2) + 1e-6), axis=1)
-        actor_action = 2 * pi
-
-        q1, q2 = critic(state, actor_action)
-        min_q = jnp.minimum(q1, q2)
-        partial_loss_fn = jax.vmap(partial(actor_loss_fn))
-        actor_loss = partial_loss_fn(log_p, min_q)
-        return jnp.mean(actor_loss), log_p
-
-    grad, log_p = jax.grad(loss_fn, has_aux=True)(optimizer.target)
-    return optimizer.apply_gradient(grad), log_p
-
-
-@jax.jit
-def alpha_step(optimizer, log_p, target_entropy):
-    log_p = jax.lax.stop_gradient(log_p)
-
-    def loss_fn(log_alpha):
-        partial_loss_fn = jax.vmap(partial(alpha_loss_fn, log_alpha(), target_entropy))
-        return jnp.mean(partial_loss_fn(log_p))
-
-    grad = jax.grad(loss_fn)(optimizer.target)
-    return optimizer.apply_gradient(grad)
 
 
 class SAC:
@@ -226,7 +168,7 @@ class SAC:
     def update(self, obs, action, **kwargs):
         self.i += 1
         target_Q = jax.lax.stop_gradient(
-            get_td_target(
+            self.get_td_target(
                 next(self.rng),
                 **kwargs,
                 discount=self.discount,
@@ -236,7 +178,7 @@ class SAC:
             )
         )
 
-        self.optimizer.critic = critic_step(
+        self.optimizer.critic = self.critic_step(
             optimizer=self.optimizer.critic,
             state=obs,
             action=action,
@@ -244,7 +186,7 @@ class SAC:
         )
 
         if self.i % self.policy_freq == 0:
-            self.optimizer.actor, log_p = actor_step(
+            self.optimizer.actor, log_p = self.actor_step(
                 rng=next(self.rng),
                 optimizer=self.optimizer.actor,
                 critic=self.optimizer.critic,
@@ -253,7 +195,7 @@ class SAC:
             )
 
             if self.entropy_tune:
-                self.optimizer.log_alpha = alpha_step(
+                self.optimizer.log_alpha = self.alpha_step(
                     optimizer=self.optimizer.log_alpha,
                     log_p=log_p,
                     target_entropy=self.target_entropy,
@@ -274,3 +216,68 @@ class SAC:
     def sample_action(self, rng, state):
         mu, log_sig = apply_model(self.optimizer.actor.target, state)
         return mu + random.normal(rng, mu.shape) * jnp.exp(log_sig)
+
+    @functools.partial(jax.jit, static_argnums=0)
+    def get_td_target(
+        self,
+        rng,
+        next_obs,
+        reward,
+        not_done,
+        discount,
+        actor,
+        critic_target,
+        log_alpha,
+    ):
+        mu, _ = actor(next_obs)
+        next_action = 2 * nn.tanh(mu)
+
+        target_Q1, target_Q2 = critic_target(next_obs, next_action)
+        target_Q = jnp.minimum(target_Q1, target_Q2)
+        target_Q = reward + not_done * discount * target_Q
+
+        return target_Q
+
+    @functools.partial(jax.jit, static_argnums=0)
+    def critic_step(self, optimizer, state, action, target_Q):
+        def loss_fn(critic):
+            current_Q1, current_Q2 = critic(state, action)
+            critic_loss = double_mse(current_Q1, current_Q2, target_Q)
+            return jnp.mean(critic_loss)
+
+        grad = jax.grad(loss_fn)(optimizer.target)
+        return optimizer.apply_gradient(grad)
+
+    @functools.partial(jax.jit, static_argnums=0)
+    def actor_step(self, rng, optimizer, critic, state, log_alpha):
+        critic, log_alpha = critic.target, log_alpha.target
+
+        def loss_fn(actor):
+            mu, log_sig = actor(state, key=rng)
+            pi = mu + random.normal(rng, mu.shape) * jnp.exp(log_sig)
+            log_p = gaussian_likelihood(pi, mu, log_sig)
+            pi = nn.tanh(pi)
+            log_p -= jnp.sum(jnp.log(nn.relu(1 - pi ** 2) + 1e-6), axis=1)
+            actor_action = 2 * pi
+
+            q1, q2 = critic(state, actor_action)
+            min_q = jnp.minimum(q1, q2)
+            partial_loss_fn = jax.vmap(partial(actor_loss_fn))
+            actor_loss = partial_loss_fn(log_p, min_q)
+            return jnp.mean(actor_loss), log_p
+
+        grad, log_p = jax.grad(loss_fn, has_aux=True)(optimizer.target)
+        return optimizer.apply_gradient(grad), log_p
+
+    @functools.partial(jax.jit, static_argnums=0)
+    def alpha_step(self, optimizer, log_p, target_entropy):
+        log_p = jax.lax.stop_gradient(log_p)
+
+        def loss_fn(log_alpha):
+            partial_loss_fn = jax.vmap(
+                partial(alpha_loss_fn, log_alpha(), target_entropy)
+            )
+            return jnp.mean(partial_loss_fn(log_p))
+
+        grad = jax.grad(loss_fn)(optimizer.target)
+        return optimizer.apply_gradient(grad)
