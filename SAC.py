@@ -169,7 +169,6 @@ class SAC:
         self.i += 1
         target_Q = jax.lax.stop_gradient(
             self.get_td_target(
-                next(self.rng),
                 **kwargs,
                 discount=self.discount,
                 actor=self.optimizer.actor.target,
@@ -219,15 +218,7 @@ class SAC:
 
     @functools.partial(jax.jit, static_argnums=0)
     def get_td_target(
-        self,
-        rng,
-        next_obs,
-        reward,
-        not_done,
-        discount,
-        actor,
-        critic_target,
-        log_alpha,
+        self, next_obs, reward, not_done, discount, actor, critic_target, log_alpha,
     ):
         mu, _ = actor(next_obs)
         next_action = 2 * nn.tanh(mu)
