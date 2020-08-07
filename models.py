@@ -87,17 +87,7 @@ class GaussianPolicy(nn.Module):
         log_sig = nn.softplus(log_sig)
         log_sig = jnp.clip(log_sig, log_sig_min, log_sig_max)
 
-        if MPO:
-            return mu, log_sig
-
-        if key is None:
-            return max_action * nn.tanh(mu), log_sig
-        else:
-            pi = mu + random.normal(key, mu.shape) * jnp.exp(log_sig)
-            log_pi = gaussian_likelihood(pi, mu, log_sig)
-            pi = nn.tanh(pi)
-            log_pi -= jnp.sum(jnp.log(nn.relu(1 - pi ** 2) + 1e-6), axis=1)
-            return max_action * pi, log_pi
+        return mu, log_sig
 
 
 class Constant(nn.Module):

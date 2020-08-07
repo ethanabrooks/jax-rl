@@ -16,6 +16,7 @@ from models import (
     Constant,
 )
 from utils import double_mse, apply_model, copy_params
+from utils import gaussian_likelihood
 
 
 @dataclass
@@ -55,10 +56,11 @@ def alpha_loss_fn(log_alpha, target_entropy, log_p):
 def get_td_target(
     rng, next_obs, reward, not_done, discount, actor, critic_target, log_alpha,
 ):
-    next_action, next_log_p = actor(next_obs)
+    mu, _ = actor(next_obs)
+    next_action = 2 * nn.tanh(mu)
 
     target_Q1, target_Q2 = critic_target(next_obs, next_action)
-    target_Q = jnp.minimum(target_Q1, target_Q2) - jnp.exp(log_alpha()) * next_log_p
+    target_Q = jnp.minimum(target_Q1, target_Q2)
     target_Q = reward + not_done * discount * target_Q
 
     return target_Q
@@ -80,7 +82,13 @@ def actor_step(rng, optimizer, critic, state, log_alpha):
     critic, log_alpha = critic.target, log_alpha.target
 
     def loss_fn(actor):
-        actor_action, log_p = actor(state, key=rng)
+        mu, log_sig = actor(state, key=rng)
+        pi = mu + random.normal(rng, mu.shape) * jnp.exp(log_sig)
+        log_p = gaussian_likelihood(pi, mu, log_sig)
+        pi = nn.tanh(pi)
+        log_p -= jnp.sum(jnp.log(nn.relu(1 - pi ** 2) + 1e-6), axis=1)
+        actor_action = 2 * pi
+
         q1, q2 = critic(state, actor_action)
         min_q = jnp.minimum(q1, q2)
         partial_loss_fn = jax.vmap(partial(actor_loss_fn))
