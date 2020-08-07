@@ -173,7 +173,6 @@ class SAC:
                 discount=self.discount,
                 actor=self.optimizer.actor.target,
                 critic_target=(self.model.target_critic),
-                log_alpha=self.optimizer.log_alpha.target
             )
         )
 
@@ -218,7 +217,7 @@ class SAC:
 
     @functools.partial(jax.jit, static_argnums=0)
     def get_td_target(
-        self, next_obs, reward, not_done, discount, actor, critic_target, log_alpha,
+        self, next_obs, reward, not_done, discount, actor, critic_target,
     ):
         mu, _ = actor(next_obs)
         next_action = 2 * nn.tanh(mu)
