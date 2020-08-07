@@ -13,6 +13,16 @@ def big_values(start, stop):
     return [j for i in range(start, stop) for j in ((10 ** i), 5 * (10 ** i))]
 
 
+def get_config(name):
+    path = Path("configs", name).with_suffix(".json")
+    if path.exists():
+        with path.open() as f:
+            config = json.load(f)
+            del config["use_tune"]
+            return config
+    return configs[name]
+
+
 search = dict(
     actor_freq=hp.choice("actor_freq", [1, 2, 3]),
     batch_size=hp.choice("batch_size", medium_values(6, 10)),
@@ -49,3 +59,7 @@ double_search = dict(
     **{"outer_" + k: v for k, v in search.items()}
 )
 double_search.update(start_time_steps=0, outer_start_time_steps=1)
+
+configs = dict(
+    search=search, pendulum=pendulum, double=double, double_search=double_search,
+)
