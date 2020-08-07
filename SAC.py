@@ -55,7 +55,7 @@ def alpha_loss_fn(log_alpha, target_entropy, log_p):
 def get_td_target(
     rng, next_obs, reward, not_done, discount, actor, critic_target, log_alpha,
 ):
-    next_action, next_log_p = actor(next_obs, sample=True, key=rng)
+    next_action, next_log_p = actor(next_obs)
 
     target_Q1, target_Q2 = critic_target(next_obs, next_action)
     target_Q = jnp.minimum(target_Q1, target_Q2) - jnp.exp(log_alpha()) * next_log_p
@@ -80,7 +80,7 @@ def actor_step(rng, optimizer, critic, state, log_alpha):
     critic, log_alpha = critic.target, log_alpha.target
 
     def loss_fn(actor):
-        actor_action, log_p = actor(state, sample=True, key=rng)
+        actor_action, log_p = actor(state, key=rng)
         q1, q2 = critic(state, actor_action)
         min_q = jnp.minimum(q1, q2)
         partial_loss_fn = jax.vmap(partial(actor_loss_fn))

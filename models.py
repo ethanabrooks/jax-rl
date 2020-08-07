@@ -73,7 +73,6 @@ class GaussianPolicy(nn.Module):
         max_action,
         key=None,
         MPO=False,
-        sample=False,
         log_sig_min=-20,
         log_sig_max=2,
     ):
@@ -91,7 +90,7 @@ class GaussianPolicy(nn.Module):
         if MPO:
             return mu, log_sig
 
-        if not sample:
+        if key is None:
             return max_action * nn.tanh(mu), log_sig
         else:
             pi = mu + random.normal(key, mu.shape) * jnp.exp(log_sig)
