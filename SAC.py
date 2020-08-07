@@ -116,7 +116,7 @@ class SAC:
         tau=0.005,
         actor_freq=2,
         lr=3e-4,
-        entropy_tune=True,
+        entropy_tune=False,
         seed=0,
     ):
 
@@ -141,7 +141,7 @@ class SAC:
         self.module = Modules(
             actor=GaussianPolicy.partial(action_dim=action_dim, max_action=max_action),
             critic=DoubleCritic.partial(),
-            alpha=Constant.partial(start_value=-3.5),
+            alpha=Constant.partial(start_value=1),
         )
         self.optimizer = None
 

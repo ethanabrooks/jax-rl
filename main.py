@@ -138,14 +138,14 @@ class Trainer:
                     run,
                     name=name,
                     config=config,
-                    resources_per_trial={"gpu": 1, "cpu": 2},
+                    resources_per_trial={"gpu": 1, "cpu": 6},
                 )
             else:
                 tune.run(
                     run,
                     config=config,
                     name=name,
-                    resources_per_trial={"gpu": 1, "cpu": 2},
+                    resources_per_trial={"gpu": 1, "cpu": 6},
                     # scheduler=ASHAScheduler(metric=metric, mode="max"),
                     search_alg=HyperOptSearch(config, metric=metric, mode="max"),
                     num_samples=num_samples,
